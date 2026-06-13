@@ -1,0 +1,279 @@
+/* Physiospree — Screens (Onboarding + Plan).
+   Dunkel, technisch, reduziert. Plain CSS (kein Tailwind), mobile-first,
+   große Touch-Targets (>=48px). Eigene Klassen mit expliziten Farben, damit
+   die globalen index.css-Variablen (hell/dunkel) nicht durchschlagen. */
+
+.ps-screen {
+  position: fixed;
+  inset: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: normal;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ps-screen button {
+  font-family: inherit;
+}
+
+.ps-shell {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 24px 20px calc(28px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+/* --- Kopf: Zurück + Fortschritt --- */
+.ps-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin-bottom: 12px;
+}
+.ps-back {
+  appearance: none;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.ps-back:active {
+  background: #273449;
+}
+.ps-progress {
+  flex: 1 1 auto;
+}
+.ps-progress-label {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+.ps-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #1e293b;
+  overflow: hidden;
+}
+.ps-progress-fill {
+  height: 100%;
+  background: #f97316;
+  border-radius: 999px;
+  transition: width 220ms ease;
+}
+
+/* --- Frage --- */
+.ps-title {
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #f8fafc;
+  margin: 20px 0 4px;
+}
+.ps-subtitle {
+  font-size: 15px;
+  color: #94a3b8;
+  margin: 0 0 24px;
+}
+
+/* --- Auswahlkarten --- */
+.ps-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ps-card {
+  appearance: none;
+  text-align: left;
+  width: 100%;
+  min-height: 68px;
+  box-sizing: border-box;
+  padding: 16px 18px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  color: #e2e8f0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    transform 80ms ease;
+}
+.ps-card:active {
+  transform: scale(0.99);
+}
+.ps-card.is-selected {
+  border-color: #f97316;
+  background: #2a2218;
+}
+.ps-card-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+.ps-card-sub {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+/* --- Equipment-Toggles --- */
+.ps-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ps-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ps-toggle-q {
+  font-size: 16px;
+  color: #e2e8f0;
+}
+.ps-toggle-opts {
+  display: flex;
+  gap: 10px;
+}
+.ps-toggle-btn {
+  flex: 1 1 0;
+  min-height: 48px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #cbd5e1;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ps-toggle-btn.is-selected {
+  border-color: #f97316;
+  background: #2a2218;
+  color: #f8fafc;
+}
+
+/* --- Aktionen unten --- */
+.ps-actions {
+  margin-top: auto;
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ps-btn {
+  appearance: none;
+  width: 100%;
+  min-height: 56px;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.ps-btn-primary {
+  background: #f97316;
+  color: #0f172a;
+}
+.ps-btn-primary:disabled {
+  background: #3a2d20;
+  color: #7c6a54;
+  cursor: not-allowed;
+}
+.ps-btn-ghost {
+  background: transparent;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+.ps-btn-ghost:active {
+  background: #1e293b;
+}
+
+/* --- Zentrierter Zustand (Laden / Plan) --- */
+.ps-center {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 18px;
+  padding: 40px 0;
+}
+.ps-spinner {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 4px solid #1e293b;
+  border-top-color: #f97316;
+  animation: ps-spin 0.9s linear infinite;
+}
+@keyframes ps-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ps-loading-text {
+  font-size: 18px;
+  color: #f8fafc;
+  font-weight: 600;
+}
+.ps-loading-sub {
+  font-size: 14px;
+  color: #94a3b8;
+  max-width: 280px;
+}
+
+/* --- Fehler --- */
+.ps-error-card {
+  border: 1px solid #7f1d1d;
+  background: #2a1416;
+  border-radius: 14px;
+  padding: 18px;
+  color: #fecaca;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.ps-error-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fca5a5;
+  margin-bottom: 6px;
+}
+
+/* --- Plan-Platzhalter --- */
+.ps-badge {
+  display: inline-block;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f97316;
+  border: 1px solid #f97316;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.ps-plan-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.3;
+}

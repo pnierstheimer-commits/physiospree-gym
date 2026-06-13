@@ -1,26 +1,13 @@
 import { useApp } from './lib/state'
-import './App.css'
+import { OnboardingScreen } from './screens/OnboardingScreen'
+import { PlanScreen } from './screens/PlanScreen'
 
 function App() {
-  const { state } = useApp()
+  const { currentPlan } = useApp()
 
-  return (
-    <main
-      style={{
-        fontFamily: 'system-ui, sans-serif',
-        padding: '2rem',
-        maxWidth: 640,
-        margin: '0 auto',
-      }}
-    >
-      <h1>Physiospree Gym — Phase 0 abgeschlossen</h1>
-      <p>KI-Kraftcoach fürs Fitnessstudio.</p>
-      <p style={{ color: '#64748b', fontSize: '0.875rem' }}>
-        Schema v{state.schemaVersion} · zuletzt geändert{' '}
-        {new Date(state.stateUpdatedAt).toLocaleString('de-DE')}
-      </p>
-    </main>
-  )
+  // Kein Plan -> Onboarding (inkl. Loading/Fehler während der Generierung).
+  // Plan vorhanden -> Plan-Screen.
+  return currentPlan ? <PlanScreen /> : <OnboardingScreen />
 }
 
 export default App
