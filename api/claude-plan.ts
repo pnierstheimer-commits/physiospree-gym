@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4 } from 'uuid';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { CYCLE_LENGTH_WEEKS } from '../src/shared/constants';
 import type {
   BlockPhase,
@@ -488,49 +489,46 @@ function buildUserPrompt(
 // HTTP-Helfer
 // ---------------------------------------------------------------------------
 
-function jsonResponse(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
+function sendJson(res: VercelResponse, status: number, body: unknown): void {
+  res.status(status).json(body);
 }
 
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
-      status: 405,
-      headers: { 'content-type': 'application/json', allow: 'POST' },
-    });
+    res.setHeader('Allow', 'POST');
+    sendJson(res, 405, { error: 'method_not_allowed' });
+    return;
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return jsonResponse(
-      { error: 'config_error', message: 'ANTHROPIC_API_KEY ist serverseitig nicht gesetzt.' },
-      500,
-    );
+    sendJson(res, 500, {
+      error: 'config_error',
+      message: 'ANTHROPIC_API_KEY ist serverseitig nicht gesetzt.',
+    });
+    return;
   }
 
-  // 1) Request lesen + minimal validieren
+  // 1) Request lesen + minimal validieren.
+  // @vercel/node parst JSON-Bodies automatisch; bei String selbst parsen.
   let request: PlanRequest;
   try {
-    request = (await req.json()) as PlanRequest;
+    request = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as PlanRequest;
   } catch {
-    return jsonResponse({ error: 'bad_request', message: 'Body ist kein gültiges JSON.' }, 400);
+    sendJson(res, 400, { error: 'bad_request', message: 'Body ist kein gültiges JSON.' });
+    return;
   }
 
   const profile = request?.profile;
   if (!profile?.userId || !profile.goal || !profile.experience || !profile.daysPerWeek) {
-    return jsonResponse(
-      {
-        error: 'bad_request',
-        message: 'profile mit userId, goal, experience und daysPerWeek ist erforderlich.',
-      },
-      400,
-    );
+    sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'profile mit userId, goal, experience und daysPerWeek ist erforderlich.',
+    });
+    return;
   }
 
   // 2) Segment + Guard + Zykluslänge (deterministisch aus constants.ts)
@@ -576,22 +574,16 @@ export default async function handler(req: Request): Promise<Response> {
       .trim();
 
     if (!raw) {
-      return jsonResponse(
-        { error: 'upstream_error', message: 'Modell lieferte keinen Text zurück.' },
-        502,
-      );
+      sendJson(res, 502, { error: 'upstream_error', message: 'Modell lieferte keinen Text zurück.' });
+      return;
     }
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
-      return jsonResponse(
-        { error: 'upstream_error', message: `Claude API: ${err.message}` },
-        502,
-      );
+      sendJson(res, 502, { error: 'upstream_error', message: `Claude API: ${err.message}` });
+      return;
     }
-    return jsonResponse(
-      { error: 'internal_error', message: (err as Error).message },
-      500,
-    );
+    sendJson(res, 500, { error: 'internal_error', message: (err as Error).message });
+    return;
   }
 
   // 4) Antwort trennen + validieren
@@ -600,10 +592,8 @@ export default async function handler(req: Request): Promise<Response> {
     plan = parseCoachPlan(raw);
   } catch (err) {
     if (err instanceof PlanValidationError) {
-      return jsonResponse(
-        { error: 'unprocessable_plan', message: err.message },
-        422,
-      );
+      sendJson(res, 422, { error: 'unprocessable_plan', message: err.message });
+      return;
     }
     throw err;
   }
@@ -663,5 +653,5 @@ export default async function handler(req: Request): Promise<Response> {
   });
 
   const response: PlanResponse = { framework, actions };
-  return jsonResponse(response, 200);
+  sendJson(res, 200, response);
 }
