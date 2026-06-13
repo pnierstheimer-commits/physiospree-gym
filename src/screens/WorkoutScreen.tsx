@@ -13,10 +13,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useApp } from '../lib/state';
-import type { WorkoutExercise, WorkoutSet } from '../shared/types';
+import {
+  convertCoachMarkers,
+  evaluateWorkout,
+  type CoachEvaluation,
+  type CoachEvaluationItem,
+  type Verdict,
+} from '../lib/services/coachService';
+import type { Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
 import './screens.css';
 
 const RPE_OPTIONS = [6, 7, 8, 9, 10];
+
+const VERDICT_META: Record<Verdict, { label: string; tone: 'green' | 'red' | 'yellow' }> = {
+  in_range: { label: 'Im Ziel', tone: 'green' },
+  above_range: { label: 'Reps am Limit', tone: 'green' },
+  below_range: { label: 'Zu schwer', tone: 'red' },
+  rpe_low: { label: 'Mehr Intensität', tone: 'yellow' },
+  stagnation: { label: 'Stagnation', tone: 'yellow' },
+};
 
 interface SetInput {
   weight: string;
@@ -56,13 +71,37 @@ function formatTime(s: number): string {
   return `${m}:${ss.toString().padStart(2, '0')}`;
 }
 
+/** Kompakte Ist-Werte einer Übung: "40 kg × 15/15/14 @ RPE 9". */
+function formatSetsSummary(sets: WorkoutSet[]): string {
+  if (sets.length === 0) return 'Keine Sätze erfasst';
+  const sorted = [...sets].sort((a, b) => a.setNumber - b.setNumber);
+  const load = sorted[0].weightKg;
+  const reps = sorted.map((s) => s.reps).join('/');
+  const rpe = sorted[0].rpe;
+  return `${load} kg × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
+}
+
+/** Adjustment-Zeile mit Pfeil + Delta. */
+function adjustmentLine(item: CoachEvaluationItem): string {
+  if (item.adjustment === 'maintain' || item.newLoad == null) return '→ Gewicht bleibt';
+  const delta = item.newLoad - item.currentLoad;
+  const sign = delta >= 0 ? '+' : '−';
+  const mag = Math.abs(Math.round(delta * 100) / 100);
+  return item.adjustment === 'increase'
+    ? `↑ Nächste Woche: ${item.newLoad} kg (${sign}${mag})`
+    : `↓ Runter auf ${item.newLoad} kg (${sign}${mag})`;
+}
+
 export function WorkoutScreen() {
-  const { activeWorkout, currentPlan, logSet, completeWorkout, abortWorkout } = useApp();
+  const { activeWorkout, currentPlan, logSet, completeWorkout, abortWorkout, applyMarkers } =
+    useApp();
 
   const [exIndex, setExIndex] = useState(0);
-  const [phase, setPhase] = useState<'train' | 'summary'>('train');
+  const [phase, setPhase] = useState<'train' | 'summary' | 'evaluating' | 'evaluation'>('train');
   const [inputs, setInputs] = useState<Record<string, SetInput>>({});
   const [timer, setTimer] = useState<{ secondsLeft: number; key: string } | null>(null);
+  const [evaluation, setEvaluation] = useState<CoachEvaluation | null>(null);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
   // Warnung bei Reload/Schließen während eines aktiven Workouts.
   useEffect(() => {
@@ -183,6 +222,112 @@ export function WorkoutScreen() {
     }
   };
 
+  // Speichern -> Coach-Auswertung anfordern (Workout noch nicht committen,
+  // sonst verschwindet der Screen). Snapshot mit status 'completed' für den
+  // Endpoint-Guard.
+  const onSave = async () => {
+    if (!currentPlan) {
+      completeWorkout();
+      return;
+    }
+    const snapshot: Workout = {
+      ...activeWorkout,
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+    };
+    setEvalError(null);
+    setPhase('evaluating');
+    try {
+      const result = await evaluateWorkout(snapshot, currentPlan);
+      setEvaluation(result);
+      setPhase('evaluation');
+    } catch (err) {
+      setEvalError(err instanceof Error ? err.message : 'Auswertung fehlgeschlagen.');
+    }
+  };
+
+  // "Verstanden": Marker anwenden, Workout committen -> zurück zum PlanScreen.
+  const onAcknowledge = () => {
+    if (evaluation) applyMarkers(convertCoachMarkers(evaluation.markers));
+    completeWorkout();
+  };
+
+  // -------------------------------------------------------------------------
+  // Coach wertet aus (Loading / Fehler)
+  // -------------------------------------------------------------------------
+  if (phase === 'evaluating') {
+    return (
+      <div className="ps-screen">
+        <div className="ps-shell">
+          {evalError ? (
+            <>
+              <div className="ps-plan-title">Auswertung fehlgeschlagen</div>
+              <p className="ps-subtitle">Dein Workout ist erfasst — nur der Coach hat gepatzt.</p>
+              <div className="ps-error-card">
+                <div className="ps-error-title">Fehler</div>
+                {evalError}
+              </div>
+              <div className="ps-actions">
+                <button type="button" className="ps-btn ps-btn-primary" onClick={onSave}>
+                  Nochmal versuchen
+                </button>
+                <button type="button" className="ps-btn ps-btn-ghost" onClick={completeWorkout}>
+                  Ohne Auswertung speichern
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="ps-center">
+              <div className="ps-spinner" aria-hidden="true" />
+              <div className="ps-loading-text">Coach wertet aus …</div>
+              <p className="ps-loading-sub">
+                Deine Sätze werden gegen den Plan geprüft. Das dauert ein paar Sekunden.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Auswertung
+  // -------------------------------------------------------------------------
+  if (phase === 'evaluation' && evaluation) {
+    return (
+      <div className="ps-screen">
+        <div className="ps-shell">
+          <div className="ps-progress-label">Auswertung · RPE {evaluation.overallRPE}/10</div>
+          <p className="ps-coach-msg">{evaluation.coachMessage}</p>
+
+          <div className="ps-evals">
+            {evaluation.evaluation.map((item, i) => {
+              const meta = VERDICT_META[item.verdict];
+              const ev = exViews.find((e) => e.name === item.exerciseName);
+              return (
+                <div key={i} className="ps-eval-card">
+                  <div className="ps-eval-head">
+                    <span className="ps-eval-name">{item.exerciseName}</span>
+                    <span className={`ps-pill ps-pill-${meta.tone}`}>{meta.label}</span>
+                  </div>
+                  {ev && <div className="ps-eval-sets">{formatSetsSummary(ev.we.sets)}</div>}
+                  <div className="ps-eval-adjust">{adjustmentLine(item)}</div>
+                  <p className="ps-eval-rationale">{item.rationale}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="ps-actions">
+            <button type="button" className="ps-btn ps-btn-primary" onClick={onAcknowledge}>
+              Verstanden
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Zusammenfassung
   // -------------------------------------------------------------------------
@@ -226,7 +371,7 @@ export function WorkoutScreen() {
           </div>
 
           <div className="ps-actions">
-            <button type="button" className="ps-btn ps-btn-primary" onClick={completeWorkout}>
+            <button type="button" className="ps-btn ps-btn-primary" onClick={onSave}>
               Workout speichern
             </button>
             <button
