@@ -250,6 +250,38 @@ export interface CoachAction extends Syncable {
 }
 
 // ---------------------------------------------------------------------------
+// Geparste Marker (Coach-Marker aus CoachActions, App-Integration)
+// ---------------------------------------------------------------------------
+
+/**
+ * Marker-Vokabular der App-Integration (Coach-Skill §10). Diese Marker werden
+ * aus den `CoachAction`s einer PlanResponse extrahiert und gespeichert; die
+ * eigentliche Anwendung auf den State folgt im Feedback-Loop (Phase 3).
+ */
+export type ParsedMarkerKind =
+  | 'LOAD_ADJUSTMENT'
+  | 'DELOAD'
+  | 'PHASE_SHIFT'
+  | 'EXERCISE_SWAP'
+  | 'EXERCISE_UPGRADE'
+  | 'SESSION_ADJUSTMENT'
+  | 'ILLNESS_RECOVERY'
+  | 'VACATION_MODE';
+
+/** Aus einer CoachAction extrahierter, typisierter Marker (noch nicht angewendet). */
+export interface ParsedMarker {
+  kind: ParsedMarkerKind;
+  /** Quell-CoachAction (auditierbar). */
+  sourceActionId: UUID;
+  /** Menschlich lesbare Begründung (aus der Action übernommen). */
+  rationale: string;
+  /** Betroffene Entität (Übung/Framework/…), falls bekannt. */
+  targetId?: UUID | null;
+  /** Strukturierte Marker-Payload (z. B. delta, volumeReduction). */
+  payload: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
 // Übungskatalog
 // ---------------------------------------------------------------------------
 
@@ -307,4 +339,14 @@ export interface PersistedState {
   coachActions: CoachAction[];
   /** Übungskatalog (lokal gecacht). */
   exercises: ExerciseDefinition[];
+  /**
+   * Aktuell aktiver Plan (Framework + begleitende Actions), wie ihn der
+   * Generator geliefert hat. Offline-First: überlebt Reload (Regel 9).
+   */
+  currentPlan: PlanResponse | null;
+  /**
+   * Aus `currentPlan.actions` extrahierte Marker (Coach-Skill §10). Werden
+   * gespeichert, aber noch nicht auf den State angewendet (Phase 3).
+   */
+  parsedMarkers: ParsedMarker[];
 }

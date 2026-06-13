@@ -21,7 +21,8 @@ import {
   type ReactNode,
 } from 'react';
 import { SCHEMA_VERSION, STORAGE_KEY } from '../shared/constants';
-import type { PersistedState } from '../shared/types';
+import type { PersistedState, PlanResponse, UserProfile } from '../shared/types';
+import { generatePlan, parseMarkers } from './services/planService';
 
 // ---------------------------------------------------------------------------
 // Initialer / leerer State
@@ -39,6 +40,8 @@ function emptyState(): PersistedState {
     markers: [],
     coachActions: [],
     exercises: [],
+    currentPlan: null,
+    parsedMarkers: [],
   };
 }
 
@@ -74,6 +77,23 @@ interface AppContextValue {
   replaceState: (next: PersistedState) => void;
   /** State auf leer zurücksetzen. */
   resetState: () => void;
+
+  // --- Plan (KI-Pfad, Regel 8) ---
+  /** Aktuell aktiver Plan oder null. */
+  currentPlan: PlanResponse | null;
+  /** Läuft gerade eine Plananfrage? (transient, nicht persistiert) */
+  planLoading: boolean;
+  /** Letzter Planfehler oder null. (transient, nicht persistiert) */
+  planError: string | null;
+  /**
+   * Speichert einen fertigen Plan: Framework + Detail-Wochen + Actions, und
+   * extrahiert die Marker (noch ohne Anwendung — Phase 3).
+   */
+  setPlan: (plan: PlanResponse) => void;
+  /** Entfernt den aktuellen Plan. */
+  clearPlan: () => void;
+  /** Fordert einen Plan über den planService an und pflegt loading/error/plan. */
+  requestPlan: (profile: UserProfile) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -84,6 +104,11 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(loadState);
+
+  // Transient: gehört nicht in localStorage (ein Reload ist nie "mitten im
+  // Laden", und alte Fehler sollen nicht wieder auftauchen).
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   // Persistenz: bei jeder State-Änderung in localStorage schreiben.
   // Debounced über requestIdleCallback-Fallback, um Schreibstürme zu dämpfen.
@@ -123,9 +148,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(() => emptyState());
   }, []);
 
+  // --- Plan-Actions (Regel 1: immer funktionaler Updater) ---
+
+  /** Persistiert einen Plan + extrahierte Marker. updatedAt = lokaler Schreibzeitpunkt (Regel 5). */
+  const storePlan = useCallback(
+    (plan: PlanResponse) => {
+      const now = new Date().toISOString();
+      update(() => ({
+        currentPlan: {
+          ...plan,
+          framework: { ...plan.framework, updatedAt: now },
+        },
+        parsedMarkers: parseMarkers(plan.actions),
+      }));
+    },
+    [update],
+  );
+
+  const setPlan = useCallback<AppContextValue['setPlan']>(
+    (plan) => {
+      storePlan(plan);
+      setPlanError(null);
+      setPlanLoading(false);
+    },
+    [storePlan],
+  );
+
+  const clearPlan = useCallback<AppContextValue['clearPlan']>(() => {
+    update(() => ({ currentPlan: null, parsedMarkers: [] }));
+    setPlanError(null);
+  }, [update]);
+
+  const requestPlan = useCallback<AppContextValue['requestPlan']>(
+    async (profile) => {
+      setPlanLoading(true);
+      setPlanError(null);
+      try {
+        const plan = await generatePlan(profile);
+        storePlan(plan);
+      } catch (err) {
+        setPlanError(
+          err instanceof Error ? err.message : 'Unbekannter Fehler bei der Planerstellung.',
+        );
+      } finally {
+        setPlanLoading(false);
+      }
+    },
+    [storePlan],
+  );
+
   const value = useMemo<AppContextValue>(
-    () => ({ state, update, replaceState, resetState }),
-    [state, update, replaceState, resetState],
+    () => ({
+      state,
+      update,
+      replaceState,
+      resetState,
+      currentPlan: state.currentPlan,
+      planLoading,
+      planError,
+      setPlan,
+      clearPlan,
+      requestPlan,
+    }),
+    [state, update, replaceState, resetState, planLoading, planError, setPlan, clearPlan, requestPlan],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
