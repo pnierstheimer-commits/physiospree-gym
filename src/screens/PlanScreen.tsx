@@ -124,7 +124,7 @@ function isCalibration(name: string): boolean {
 }
 
 export function PlanScreen() {
-  const { currentPlan, clearPlan } = useApp();
+  const { currentPlan, clearPlan, startWorkout } = useApp();
   // Default: erste Woche offen; -1 = alle zu (Akkordeon).
   const [openWeek, setOpenWeek] = useState(0);
 
@@ -244,6 +244,13 @@ export function PlanScreen() {
                                 );
                               })}
                             </div>
+                            <button
+                              type="button"
+                              className="ps-btn ps-btn-primary ps-start-btn"
+                              onClick={() => startWorkout(session)}
+                            >
+                              Training starten
+                            </button>
                           </div>
                         );
                       })}

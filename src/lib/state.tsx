@@ -20,8 +20,17 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { SCHEMA_VERSION, STORAGE_KEY } from '../shared/constants';
-import type { PersistedState, PlanResponse, UserProfile } from '../shared/types';
+import type {
+  PersistedState,
+  PlannedSession,
+  PlanResponse,
+  UserProfile,
+  Workout,
+  WorkoutExercise,
+  WorkoutSet,
+} from '../shared/types';
 import { generatePlan, parseMarkers } from './services/planService';
 
 // ---------------------------------------------------------------------------
@@ -94,6 +103,23 @@ interface AppContextValue {
   clearPlan: () => void;
   /** Fordert einen Plan über den planService an und pflegt loading/error/plan. */
   requestPlan: (profile: UserProfile) => Promise<void>;
+
+  // --- Workout-Player ---
+  // activeWorkout/workoutHistory sind aus `state.workouts` abgeleitet
+  // (status === 'in_progress' = aktiv). So bleibt die Persistenz im
+  // bestehenden Feld, ohne types.ts/constants.ts zu ändern.
+  /** Laufendes Workout (status 'in_progress') oder null. */
+  activeWorkout: Workout | null;
+  /** Abgeschlossene/abgebrochene Workouts. */
+  workoutHistory: Workout[];
+  /** Startet ein Workout aus einer geplanten Einheit. */
+  startWorkout: (session: PlannedSession) => void;
+  /** Speichert/aktualisiert einen Satz der aktiven Übung (per Satznummer). */
+  logSet: (exerciseIndex: number, set: WorkoutSet) => void;
+  /** Schließt das aktive Workout ab (→ Historie). */
+  completeWorkout: () => void;
+  /** Bricht das aktive Workout ab; Teildaten bleiben als 'skipped' erhalten. */
+  abortWorkout: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -197,6 +223,108 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [storePlan],
   );
 
+  // --- Workout-Actions (Regel 1: funktionaler Updater) ---
+
+  const startWorkout = useCallback<AppContextValue['startWorkout']>(
+    (session) => {
+      const now = new Date().toISOString();
+      update((prev) => {
+        const userId = prev.currentPlan?.framework.userId ?? uuidv4();
+        const workoutId = uuidv4();
+        const exercises: WorkoutExercise[] = [...session.exercises]
+          .sort((a, b) => a.order - b.order)
+          .map((pe, idx) => ({
+            id: uuidv4(),
+            updatedAt: now,
+            deletedAt: null,
+            workoutId,
+            exerciseId: pe.exerciseId,
+            order: idx,
+            sets: [],
+            notes: pe.notes,
+          }));
+        const workout: Workout = {
+          id: workoutId,
+          updatedAt: now,
+          deletedAt: null,
+          userId,
+          plannedSessionId: session.id,
+          date: now,
+          name: session.name,
+          status: 'in_progress',
+          startedAt: now,
+          exercises,
+          checkin: null,
+        };
+        // Nur ein aktives Workout: evtl. vorhandenes (unfertiges) verwerfen.
+        const others = prev.workouts.filter((w) => w.status !== 'in_progress');
+        return { workouts: [...others, workout] };
+      });
+    },
+    [update],
+  );
+
+  const logSet = useCallback<AppContextValue['logSet']>(
+    (exerciseIndex, set) => {
+      update((prev) => {
+        const idx = prev.workouts.findIndex((w) => w.status === 'in_progress');
+        if (idx === -1) return {};
+        const now = new Date().toISOString();
+        const active = prev.workouts[idx];
+        const exercises = active.exercises.map((ex, i) => {
+          if (i !== exerciseIndex) return ex;
+          const pos = ex.sets.findIndex((s) => s.setNumber === set.setNumber);
+          const sets =
+            pos === -1
+              ? [...ex.sets, set]
+              : ex.sets.map((s, j) => (j === pos ? set : s));
+          sets.sort((a, b) => a.setNumber - b.setNumber);
+          return { ...ex, updatedAt: now, sets };
+        });
+        const updated: Workout = { ...active, updatedAt: now, exercises };
+        return { workouts: prev.workouts.map((w, i) => (i === idx ? updated : w)) };
+      });
+    },
+    [update],
+  );
+
+  const completeWorkout = useCallback<AppContextValue['completeWorkout']>(() => {
+    update((prev) => {
+      const idx = prev.workouts.findIndex((w) => w.status === 'in_progress');
+      if (idx === -1) return {};
+      const now = new Date().toISOString();
+      const done: Workout = {
+        ...prev.workouts[idx],
+        status: 'completed',
+        completedAt: now,
+        updatedAt: now,
+      };
+      return { workouts: prev.workouts.map((w, i) => (i === idx ? done : w)) };
+    });
+  }, [update]);
+
+  const abortWorkout = useCallback<AppContextValue['abortWorkout']>(() => {
+    update((prev) => {
+      const idx = prev.workouts.findIndex((w) => w.status === 'in_progress');
+      if (idx === -1) return {};
+      const now = new Date().toISOString();
+      const active = prev.workouts[idx];
+      const hasData = active.exercises.some((ex) => ex.sets.length > 0);
+      // Teildaten behalten: mit Sätzen als 'skipped' archivieren, sonst verwerfen.
+      const workouts = hasData
+        ? prev.workouts.map((w, i) =>
+            i === idx ? { ...w, status: 'skipped' as const, updatedAt: now } : w,
+          )
+        : prev.workouts.filter((_, i) => i !== idx);
+      return { workouts };
+    });
+  }, [update]);
+
+  const activeWorkout = state.workouts.find((w) => w.status === 'in_progress') ?? null;
+  const workoutHistory = state.workouts.filter(
+    (w) => w.status === 'completed' || w.status === 'skipped',
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       state,
@@ -209,8 +337,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setPlan,
       clearPlan,
       requestPlan,
+      activeWorkout,
+      workoutHistory,
+      startWorkout,
+      logSet,
+      completeWorkout,
+      abortWorkout,
     }),
-    [state, update, replaceState, resetState, planLoading, planError, setPlan, clearPlan, requestPlan],
+    [
+      state,
+      update,
+      replaceState,
+      resetState,
+      planLoading,
+      planError,
+      setPlan,
+      clearPlan,
+      requestPlan,
+      activeWorkout,
+      workoutHistory,
+      startWorkout,
+      logSet,
+      completeWorkout,
+      abortWorkout,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
