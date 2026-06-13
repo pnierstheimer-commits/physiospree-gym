@@ -85,6 +85,12 @@ export interface PlanFramework extends Syncable {
   daysPerWeek: number;
   /** Gesamtdauer in Wochen (inkl. Deload). */
   totalWeeks: number;
+  /**
+   * Zykluslänge in Wochen, abgeleitet aus Segment × Level
+   * (Single Source: `CYCLE_LENGTH_WEEKS` in constants.ts). Deload ist immer
+   * die letzte Woche. Beim ersten Plan identisch mit `totalWeeks`.
+   */
+  cycleLengthWeeks: number;
   /** Index der aktuell laufenden Woche (0-basiert). */
   currentWeekIndex: number;
   weeks: PlanWeek[];

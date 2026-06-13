@@ -185,6 +185,35 @@ export const PROGRESSION = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Zykluslänge (Wochen) je Segment × Erfahrungslevel
+// ---------------------------------------------------------------------------
+
+/**
+ * Single Source of Truth für die Zykluslänge. Der Plan-Generator
+ * (`api/claude-plan.ts`) leitet die Länge ausschließlich hieraus ab — nie frei
+ * aus der KI. Der Deload ist immer die letzte Woche des Zyklus.
+ *
+ * Die Segmente entsprechen den Trainingszielen:
+ *   strength = Maximalkraft, hypertrophy = Hypertrophie, endurance = Kraftausdauer.
+ *
+ * `null` = Kombination nicht zulässig. Maximalkraft braucht ≥6 Monate Basis;
+ * Beginner werden auf Hypertrophie umgeleitet (siehe Coach-Skill).
+ *
+ * Begründung der Längen:
+ * - Maximalkraft = 12: Anpassung ist neuronal, der Peak liegt in Wo 9–11.
+ * - Hypertrophie = 8 (Default), 12 für Advanced: volumengetrieben, verzeihend.
+ * - Kraftausdauer = 6 (Beginner) / 8: Progression über Dichte greift schnell.
+ */
+export const CYCLE_LENGTH_WEEKS: Record<
+  'strength' | 'hypertrophy' | 'endurance',
+  Record<ExperienceLevel, number | null>
+> = {
+  hypertrophy: { beginner: 8, intermediate: 8, advanced: 12 },
+  strength: { beginner: null, intermediate: 12, advanced: 12 },
+  endurance: { beginner: 6, intermediate: 8, advanced: 8 },
+} as const;
+
+// ---------------------------------------------------------------------------
 // Blockstruktur (Mesozyklus-Aufbau)
 // ---------------------------------------------------------------------------
 
@@ -205,7 +234,8 @@ export const BLOCK_STRUCTURE: {
 // Persistenz-Schemaversion (bei Breaking Changes erhöhen)
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = 1;
+// v2: PlanFramework um `cycleLengthWeeks` erweitert (Rule 7, Breaking Change).
+export const SCHEMA_VERSION = 2;
 
 /** localStorage-Schlüssel für den persistierten App-State. */
 export const STORAGE_KEY = 'physiospree.state.v1';
