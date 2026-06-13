@@ -70,3 +70,73 @@ curl -sS -X POST http://localhost:3000/api/claude-plan \
 | 422  | Modellantwort nicht parse-/validierbar (`unprocessable_plan`) |
 | 500  | `ANTHROPIC_API_KEY` fehlt o. interner Fehler |
 | 502  | Fehler der Claude API / leere Antwort |
+
+## API: Post-Workout-Coach (`POST /api/claude-coach`)
+
+Wertet ein **abgeschlossenes** Workout aus. Input: `{ workout: Workout, plan:
+PlanResponse }`. Der System-Prompt wird fokussiert aus `api/prompt/` gebaut
+(SKILL §7 Supervisor + §9 Auswertung, segmentspezifische Auswertungslogik,
+`sound.md`, Zykluslängen-Modul). Modell: `claude-sonnet-4-6`, ohne Thinking.
+
+### Beispiel-Aufruf
+
+Body als Datei (`coach.json`) — abgeschlossenes Workout + Plan-Kontext. Minimal:
+
+```jsonc
+{
+  "workout": {
+    "id": "w1", "userId": "u1", "plannedSessionId": "s1", "name": "Ganzkörper A",
+    "status": "completed", "date": "2026-06-13T12:00:00.000Z",
+    "updatedAt": "2026-06-13T12:00:00.000Z", "deletedAt": null, "checkin": null,
+    "exercises": [
+      { "id": "we1", "workoutId": "w1", "exerciseId": "c1", "order": 0,
+        "updatedAt": "x", "deletedAt": null, "notes": "Brustpresse — Cue",
+        "sets": [
+          { "id": "st1", "workoutExerciseId": "we1", "setNumber": 1, "reps": 15,
+            "weightKg": 40, "rpe": 9, "completed": true, "isWarmup": false,
+            "updatedAt": "x", "deletedAt": null }
+        ] }
+    ]
+  },
+  "plan": {
+    "framework": {
+      "id": "fw1", "userId": "u1", "name": "Hypertrophie-Zyklus (8 Wochen)",
+      "goal": "hypertrophy", "daysPerWeek": 3, "totalWeeks": 8, "cycleLengthWeeks": 8,
+      "currentWeekIndex": 0, "status": "active", "generatedAt": "x",
+      "updatedAt": "x", "deletedAt": null,
+      "weeks": [ { "id": "wk1", "frameworkId": "fw1", "weekIndex": 0,
+        "phase": "accumulation", "intensityFactor": 0.9, "isDeload": false,
+        "updatedAt": "x", "deletedAt": null, "sessions": [
+          { "id": "s1", "weekId": "wk1", "dayIndex": 0, "name": "Ganzkörper A",
+            "focus": [], "status": "planned", "workoutId": null,
+            "updatedAt": "x", "deletedAt": null, "exercises": [
+              { "id": "pe1", "sessionId": "s1", "exerciseId": "c1", "order": 0,
+                "targetSets": 3, "targetReps": [8,15], "targetRPE": 9,
+                "restSeconds": 90, "suggestedLoadKg": 40,
+                "notes": "Brustpresse — Cue", "updatedAt": "x", "deletedAt": null }
+            ] } ] } ]
+    },
+    "actions": []
+  }
+}
+```
+
+```bash
+curl -sS -X POST http://localhost:3000/api/claude-coach \
+  -H 'content-type: application/json' --data @coach.json \
+  | jq '{overallRPE, evaluation: [.evaluation[] | {exerciseName, verdict, adjustment, newLoad}], markers: [.markers[].type]}'
+```
+
+Antwort (`CoachEvaluation`): `evaluation[]` (verdict/adjustment/newLoad/rationale
+pro Übung), `markers[]` (§10-Vokabular), `overallRPE`, `coachMessage` (TRAIN-Sound).
+
+### Statuscodes
+
+| Code | Bedeutung |
+|------|-----------|
+| 200  | `CoachEvaluation` |
+| 400  | Body kein JSON / `workout`+`plan` unvollständig / `status` ≠ `completed` |
+| 405  | falsche Methode (nur POST) |
+| 422  | Modellantwort nicht parse-/validierbar (`unprocessable_evaluation`) |
+| 500  | `ANTHROPIC_API_KEY` fehlt o. interner Fehler |
+| 502  | Fehler der Claude API / leere Antwort |
