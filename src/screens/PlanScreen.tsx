@@ -15,14 +15,16 @@ export function PlanScreen() {
     <div className="ps-screen">
       <div className="ps-shell">
         <div className="ps-center">
-          <span className="ps-badge">Plan aktiv</span>
-          <div className="ps-plan-name">Plan geladen: {fw?.name ?? '—'}</div>
-          {fw && (
-            <p className="ps-loading-sub">
-              {fw.cycleLengthWeeks} Wochen · {fw.daysPerWeek}× pro Woche · {fw.weeks.length} Wochen
-              im Detail
-            </p>
-          )}
+          <div className="ps-panel">
+            <span className="ps-badge">Plan aktiv</span>
+            <div className="ps-plan-name">{fw?.name ?? 'Plan geladen'}</div>
+            {fw && (
+              <p className="ps-loading-sub">
+                {fw.cycleLengthWeeks} Wochen · {fw.daysPerWeek}× pro Woche ·{' '}
+                {fw.weeks.length} Wochen im Detail
+              </p>
+            )}
+          </div>
         </div>
         <div className="ps-actions">
           <button type="button" className="ps-btn ps-btn-ghost" onClick={clearPlan}>

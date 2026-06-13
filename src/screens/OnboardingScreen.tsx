@@ -211,13 +211,15 @@ export function OnboardingScreen() {
           )}
           <div className="ps-progress">
             <div className="ps-progress-label">
-              Schritt {step} von {TOTAL_STEPS}
+              Schritt {step} / {TOTAL_STEPS}
             </div>
-            <div className="ps-progress-track">
-              <div
-                className="ps-progress-fill"
-                style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
-              />
+            <div className="ps-progress-steps">
+              {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+                <span
+                  key={i}
+                  className={`ps-progress-step${i < step ? ' is-active' : ''}`}
+                />
+              ))}
             </div>
           </div>
         </div>

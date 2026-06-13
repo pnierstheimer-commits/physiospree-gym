@@ -1,31 +1,74 @@
-/* Physiospree — Screens (Onboarding + Plan).
-   Dunkel, technisch, reduziert. Plain CSS (kein Tailwind), mobile-first,
-   große Touch-Targets (>=48px). Eigene Klassen mit expliziten Farben, damit
-   die globalen index.css-Variablen (hell/dunkel) nicht durchschlagen. */
+/* Physiospree — Markensystem (Onboarding + Plan).
+   Warm, editoriell, reduziert. Plain CSS (kein Tailwind), mobile-first.
+   Tokens als HSL-Triplets (ohne hsl()-Wrapper), damit Alpha via
+   hsl(var(--x) / 0.7) funktioniert. Dark ist Default (html.dark). */
 
+:root {
+  /* Flächen */
+  --background: 39 24% 96%;
+  --card: 39 20% 98%;
+  --secondary: 30 15% 91%;
+  --muted: 30 12% 88%;
+  /* Text */
+  --foreground: 20 14% 8%;
+  --muted-foreground: 20 8% 46%;
+  --primary: 20 14% 8%;
+  --primary-foreground: 39 24% 96%;
+  /* Rahmen */
+  --border: 30 12% 84%;
+  /* Status */
+  --status-green: 142 60% 32%;
+  --status-green-soft: 142 40% 92%;
+  --status-yellow: 38 90% 48%;
+  --status-yellow-soft: 40 80% 92%;
+  --status-red: 0 72% 52%;
+  --status-red-soft: 0 60% 93%;
+
+  --radius: 0.75rem;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter Tight', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.dark {
+  --background: 20 14% 6%;
+  --card: 20 14% 9%;
+  --secondary: 20 10% 16%;
+  --muted: 20 10% 18%;
+  --foreground: 39 20% 94%;
+  --muted-foreground: 30 8% 58%;
+  --primary: 39 24% 92%;
+  --primary-foreground: 20 14% 6%;
+  --border: 20 10% 20%;
+  --status-green: 142 54% 46%;
+  --status-green-soft: 142 30% 16%;
+  --status-yellow: 38 85% 54%;
+  --status-yellow-soft: 40 40% 14%;
+  --status-red: 0 68% 58%;
+  --status-red-soft: 0 40% 16%;
+}
+
+/* --- Grundgerüst --- */
 .ps-screen {
-  position: fixed;
-  inset: 0;
-  background: #0f172a;
-  color: #e2e8f0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  letter-spacing: normal;
-  overflow-y: auto;
+  min-height: 100svh;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
   display: flex;
   justify-content: center;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-
 .ps-screen button {
   font-family: inherit;
 }
-
 .ps-shell {
   width: 100%;
-  max-width: 480px;
-  min-height: 100%;
+  max-width: 440px;
+  min-height: 100svh;
   box-sizing: border-box;
-  padding: 24px 20px calc(28px + env(safe-area-inset-bottom));
+  padding: 40px 20px calc(28px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   text-align: left;
@@ -34,66 +77,73 @@
 /* --- Kopf: Zurück + Fortschritt --- */
 .ps-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-end;
+  gap: 16px;
   min-height: 44px;
-  margin-bottom: 12px;
+  margin-bottom: 32px;
 }
 .ps-back {
   appearance: none;
-  border: 1px solid #334155;
-  background: #1e293b;
-  color: #e2e8f0;
   width: 44px;
   height: 44px;
-  border-radius: 10px;
-  font-size: 22px;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.ps-back:active {
-  background: #273449;
+.ps-back:hover {
+  background: hsl(var(--secondary));
 }
 .ps-progress {
   flex: 1 1 auto;
 }
 .ps-progress-label {
-  font-size: 13px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #94a3b8;
-  margin-bottom: 6px;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 12px;
 }
-.ps-progress-track {
+.ps-progress-steps {
+  display: flex;
+  gap: 6px;
+}
+.ps-progress-step {
+  flex: 1 1 0;
   height: 4px;
-  border-radius: 999px;
-  background: #1e293b;
-  overflow: hidden;
+  border-radius: 9999px;
+  background: hsl(var(--border));
+  transition: background 220ms ease;
 }
-.ps-progress-fill {
-  height: 100%;
-  background: #f97316;
-  border-radius: 999px;
-  transition: width 220ms ease;
+.ps-progress-step.is-active {
+  background: hsl(var(--primary));
 }
 
 /* --- Frage --- */
 .ps-title {
-  font-size: 26px;
-  line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: #f8fafc;
-  margin: 20px 0 4px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+  margin: 0 0 8px;
 }
 .ps-subtitle {
   font-size: 15px;
-  color: #94a3b8;
-  margin: 0 0 24px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 28px;
 }
 
-/* --- Auswahlkarten --- */
+/* --- Auswahlkarten (Choice-Buttons) --- */
 .ps-cards {
   display: flex;
   flex-direction: column;
@@ -103,53 +153,61 @@
   appearance: none;
   text-align: left;
   width: 100%;
-  min-height: 68px;
+  min-height: 64px;
   box-sizing: border-box;
-  padding: 16px 18px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 14px;
-  color: #e2e8f0;
+  padding: 16px 20px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 3px;
   transition:
-    border-color 120ms ease,
-    background 120ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
     transform 80ms ease;
+}
+.ps-card:hover {
+  border-color: hsl(var(--foreground) / 0.35);
 }
 .ps-card:active {
   transform: scale(0.99);
 }
 .ps-card.is-selected {
-  border-color: #f97316;
-  background: #2a2218;
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
 }
 .ps-card-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
 }
 .ps-card-sub {
   font-size: 14px;
-  color: #94a3b8;
+  color: hsl(var(--muted-foreground));
+}
+.ps-card.is-selected .ps-card-title {
+  color: hsl(var(--primary-foreground));
+}
+.ps-card.is-selected .ps-card-sub {
+  color: hsl(var(--primary-foreground) / 0.7);
 }
 
 /* --- Equipment-Toggles --- */
 .ps-toggles {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 .ps-toggle {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .ps-toggle-q {
   font-size: 16px;
-  color: #e2e8f0;
+  color: hsl(var(--foreground));
 }
 .ps-toggle-opts {
   display: flex;
@@ -157,25 +215,28 @@
 }
 .ps-toggle-btn {
   flex: 1 1 0;
-  min-height: 48px;
-  border: 1px solid #334155;
-  background: #1e293b;
-  color: #cbd5e1;
-  border-radius: 10px;
-  font-size: 16px;
-  font-weight: 600;
+  min-height: 44px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
 }
+.ps-toggle-btn:hover {
+  background: hsl(var(--secondary));
+}
 .ps-toggle-btn.is-selected {
-  border-color: #f97316;
-  background: #2a2218;
-  color: #f8fafc;
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
 }
 
 /* --- Aktionen unten --- */
 .ps-actions {
   margin-top: auto;
-  padding-top: 24px;
+  padding-top: 28px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -183,29 +244,32 @@
 .ps-btn {
   appearance: none;
   width: 100%;
-  min-height: 56px;
-  border-radius: 12px;
-  font-size: 17px;
-  font-weight: 700;
+  border-radius: 9999px;
   cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 500;
   border: 1px solid transparent;
 }
 .ps-btn-primary {
-  background: #f97316;
-  color: #0f172a;
+  height: 56px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.ps-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
 }
 .ps-btn-primary:disabled {
-  background: #3a2d20;
-  color: #7c6a54;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 .ps-btn-ghost {
+  height: 44px;
   background: transparent;
-  border-color: #334155;
-  color: #cbd5e1;
+  color: hsl(var(--foreground));
 }
-.ps-btn-ghost:active {
-  background: #1e293b;
+.ps-btn-ghost:hover {
+  background: hsl(var(--secondary));
 }
 
 /* --- Zentrierter Zustand (Laden / Plan) --- */
@@ -216,15 +280,15 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  gap: 18px;
+  gap: 20px;
   padding: 40px 0;
 }
 .ps-spinner {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  border: 4px solid #1e293b;
-  border-top-color: #f97316;
+  border: 3px solid hsl(var(--border));
+  border-top-color: hsl(var(--foreground));
   animation: ps-spin 0.9s linear infinite;
 }
 @keyframes ps-spin {
@@ -233,47 +297,66 @@
   }
 }
 .ps-loading-text {
-  font-size: 18px;
-  color: #f8fafc;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.1;
+  color: hsl(var(--foreground));
 }
 .ps-loading-sub {
   font-size: 14px;
-  color: #94a3b8;
+  color: hsl(var(--muted-foreground));
   max-width: 280px;
+  line-height: 1.5;
 }
 
 /* --- Fehler --- */
 .ps-error-card {
-  border: 1px solid #7f1d1d;
-  background: #2a1416;
-  border-radius: 14px;
-  padding: 18px;
-  color: #fecaca;
-  font-size: 15px;
+  border: 1px solid hsl(var(--status-red) / 0.4);
+  background: hsl(var(--status-red-soft));
+  border-radius: 1.5rem;
+  padding: 20px;
+  color: hsl(var(--foreground));
+  font-size: 14px;
   line-height: 1.5;
 }
 .ps-error-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #fca5a5;
-  margin-bottom: 6px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: hsl(var(--status-red));
+  margin-bottom: 8px;
 }
 
 /* --- Plan-Platzhalter --- */
+.ps-panel {
+  border: 1px solid hsl(var(--border) / 0.7);
+  background: hsl(var(--card));
+  border-radius: 1.5rem;
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
 .ps-badge {
   display: inline-block;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #f97316;
-  border: 1px solid #f97316;
-  border-radius: 999px;
-  padding: 4px 10px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  padding: 5px 12px;
 }
 .ps-plan-name {
-  font-size: 22px;
-  font-weight: 700;
-  color: #f8fafc;
-  line-height: 1.3;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: hsl(var(--foreground));
 }
