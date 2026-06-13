@@ -562,7 +562,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const message = await client.messages.create({
       model,
       max_tokens: 16000,
-      thinking: { type: 'adaptive' },
+      // Thinking aus: Die Periodisierungslogik steckt bereits prägnant in den
+      // Referenzdateien (SKILL/Segment/exercises). Ohne Thinking bleibt die
+      // synchrone Antwortzeit deutlich unter dem Function-Timeout; das ist für
+      // den "langsamen KI-Pfad" (Regel 8) hier der pragmatische Trade-off.
+      thinking: { type: 'disabled' },
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     });
