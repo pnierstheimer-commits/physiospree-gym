@@ -1571,6 +1571,10 @@
 .ps-navtab.is-active {
   color: hsl(var(--primary));
 }
+.ps-navtab svg {
+  width: 23px;
+  height: 23px;
+}
 .ps-navtab-label {
   font-family: var(--font-body);
   font-size: 11px;
