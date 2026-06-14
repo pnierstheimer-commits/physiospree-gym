@@ -39,7 +39,7 @@ import type {
   Workout,
 } from '../src/shared/types';
 
-export const config = { runtime: 'nodejs', maxDuration: 120 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 // Lokale Spiegelung von CYCLE_LENGTH_WEEKS aus src/shared/constants.ts (Single
 // Source, Regel 2). Die Vercel-Lambda kann zur Laufzeit nicht aus src/ auflösen
