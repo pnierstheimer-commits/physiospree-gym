@@ -24,7 +24,6 @@ import { dirname, join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4 } from 'uuid';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { CYCLE_LENGTH_WEEKS } from '../src/shared/constants';
 import type {
   BlockPhase,
   CoachAction,
@@ -41,6 +40,19 @@ import type {
 } from '../src/shared/types';
 
 export const config = { runtime: 'nodejs', maxDuration: 60 };
+
+// Lokale Spiegelung von CYCLE_LENGTH_WEEKS aus src/shared/constants.ts (Single
+// Source, Regel 2). Die Vercel-Lambda kann zur Laufzeit nicht aus src/ auflösen
+// (ESM ERR_MODULE_NOT_FOUND), deshalb hier gespiegelt. WICHTIG: Bei Änderung in
+// constants.ts diese Tabelle mitziehen.
+const CYCLE_LENGTH_WEEKS: Record<
+  'strength' | 'hypertrophy' | 'endurance',
+  Record<'beginner' | 'intermediate' | 'advanced', number | null>
+> = {
+  hypertrophy: { beginner: 8, intermediate: 8, advanced: 12 },
+  strength: { beginner: null, intermediate: 12, advanced: 12 },
+  endurance: { beginner: 6, intermediate: 8, advanced: 8 },
+};
 
 // ---------------------------------------------------------------------------
 // Segment-Ableitung (Trainingsziel -> Coach-Segment)
