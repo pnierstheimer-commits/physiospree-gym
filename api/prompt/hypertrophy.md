@@ -17,37 +17,38 @@ Die Rep-Range ist die **Leitplanke für die Gewichtswahl:**
 
 | Parameter | Wert | Steuerung |
 |-----------|------|-----------|
-| Rep-Range | **8–15** | Ran ans Muskelversagen (RPE 9–10) |
-| RPE-Ziel | **9–10 (RIR 0–1)** | Satz endet, wenn 0–1 saubere Reps übrig wären |
+| Rep-Range | **8–15** | Reps bis zum level-/phasenabhängigen RPE-Ziel |
+| RPE-Ziel | **level-/phasenabhängig (RPE 7–10)** | Beginner startet RPE 7, Intermediate/Advanced RPE 8; steigt über den Zyklus (Tabelle unten) |
 | Sätze/Übung | 3 (Beginner), 3–4 (Intermediate/Advanced) | Basis; Volumen steigt über Blöcke |
 | Sätze/Muskel/Woche | 10–20 effektive | Tracking über alle Einheiten |
 | Pause | 60–90 s (Iso/Maschine: 60 s, Mehrgelenk: 90 s) | Im Plan angeben |
 | Frequenz | 2×/Muskel/Woche | Über Split abbilden |
 | Tempo | 2–3 s exzentrisch, kontrolliert konzentrisch | Als Cue |
 
-**Beginner Wo 1–4 Ausnahme:** RPE 8 statt 9–10 (1–2 RIR). Erst Technik lernen,
-dann ans Versagen. Ab Wo 5 gilt RPE 9–10 für alle.
+**Beginner Wo 1–4 Ausnahme:** RPE 7 statt 9–10 (3 RIR). Erst Technik lernen,
+dann ans Versagen. Ab Wo 5 steigt das RPE-Ziel schrittweise (Wo 5–8 RPE 8,
+Wo 9–11 RPE 9). Nie RPE 10 für Beginner.
 
 ## Blockstruktur (12 Wochen, Intermediate/Advanced)
 
 ### Block 1 — Akkumulation (Wo 1–4)
 - Volumen: HOCH (12 → 16 Sätze/Muskel/Woche)
-- RPE: 9 (RIR 1)
+- RPE: 8 (RIR 2)
 - Rep-Range: 10–15 (oberes Ende, leichtere Gewichte, mehr Volumen)
 - Pause: 60–90 s
 - Fokus: Volumen aufbauen, metabolischen Stress maximieren
 
 ### Block 2 — Intensivierung (Wo 5–8)
 - Volumen: MITTEL (zurück auf 12 Sätze/Muskel/Woche)
-- RPE: 9–10 (RIR 0–1)
+- RPE: 9 (RIR 1)
 - Rep-Range: 8–12 (unteres Ende, schwerere Gewichte)
 - Pause: 90–120 s
 - Fokus: Lasten steigern, mechanische Spannung maximieren
 
 ### Block 3 — Realisierung + Deload (Wo 9–12)
-- Wo 9–11: Volumen NIEDRIG-MITTEL (10 Sätze), RPE 10 (RIR 0, echtes Versagen erlaubt)
+- Wo 9–11: Volumen NIEDRIG-MITTEL (10 Sätze), RPE 9–10 (RIR 0–1; Advanced: echtes Versagen)
 - Rep-Range: 8–12
-- Wo 12: Deload — Gewichte beibehalten, Volumen −40 %, RPE 6–7
+- Wo 12: Deload — Gewichte beibehalten, Volumen −40 %, RPE 6
 - Fokus: Persönliche Bestleistungen, maximaler Reiz
 
 **Davidson-Regel:** Akkumulation = Bremse (Volumen, Reparatur). Intensivierung = Gas
@@ -56,10 +57,10 @@ dann ans Versagen. Ab Wo 5 gilt RPE 9–10 für alle.
 ## Blockstruktur (12 Wochen, Beginner)
 
 Lineare Progression mit RPE-Rampe:
-- Wo 1–4: Technik + Gewöhnung (RPE **8**, RIR 2, Bewegung lernen, Rep-Range 8–15)
-- Wo 5–8: Aufbau (RPE **9**, RIR 1, volle Range ausschöpfen, Progression startet)
-- Wo 9–11: Belastung (RPE **9–10**, RIR 0–1, ran ans Versagen)
-- Wo 12: Leichte Woche (RPE 6–7, −40 % Volumen)
+- Wo 1–4: Technik + Gewöhnung (RPE **7**, RIR 3, Bewegung lernen, Rep-Range 8–15)
+- Wo 5–8: Aufbau (RPE **8**, RIR 2, volle Range ausschöpfen, Progression startet)
+- Wo 9–11: Belastung (RPE **9**, RIR 1, ran ans Versagen)
+- Wo 12: Leichte Woche (RPE 6, −40 % Volumen)
 
 ## Progressionsregeln
 
