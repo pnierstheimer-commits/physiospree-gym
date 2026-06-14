@@ -17,6 +17,7 @@ import { requestNextWindow, shouldGenerateNextWindow } from '../lib/services/win
 import { needsScheduling } from '../lib/services/scheduleService';
 import { WeekRoadmap } from '../components/WeekRoadmap';
 import { WeekDayPlanner } from '../components/WeekDayPlanner';
+import { CoachChat } from '../components/CoachChat';
 import type {
   BlockPhase,
   CoachAction,
@@ -184,6 +185,7 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
     workoutHistory,
     updateWeekSessions,
     ensureSchedule,
+    chatMessages,
   } = useApp();
 
   const initialWeek = currentPlan?.framework.currentWeekIndex ?? 0;
@@ -191,6 +193,7 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [openHistory, setOpenHistory] = useState(false);
   const [openWorkoutId, setOpenWorkoutId] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const [windowState, setWindowState] = useState<'idle' | 'generating' | 'error'>('idle');
   const [windowError, setWindowError] = useState<string | null>(null);
 
@@ -252,6 +255,9 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 10);
   const firstWeekNo = (weeks[0]?.weekIndex ?? 0) + 1;
+  const pendingProposals = chatMessages.filter(
+    (m) => m.role === 'coach' && m.status === 'pending_confirm',
+  ).length;
 
   const onSelectWeek = (weekIndex: number) => {
     setSelectedWeek(weekIndex);
@@ -338,6 +344,28 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
         ) : (
           <div className="ps-empty">Keine Detailwochen vorhanden.</div>
         )}
+
+        {/* D) Coach-Chat (collapsible) */}
+        <div className={`ps-chat-section${chatOpen ? ' is-open' : ''}`}>
+          <button
+            type="button"
+            className={`ps-chat-header${pendingProposals > 0 && !chatOpen ? ' has-proposal' : ''}`}
+            onClick={() => setChatOpen((o) => !o)}
+            aria-expanded={chatOpen}
+          >
+            <span className="ps-chat-header-title">Coach-Chat</span>
+            {pendingProposals > 0 && !chatOpen && (
+              <span className="ps-chat-flag">
+                <span className="ps-chat-flag-dot" aria-hidden="true" />
+                {pendingProposals === 1
+                  ? 'Coach hat einen Vorschlag'
+                  : `Coach hat ${pendingProposals} Vorschläge`}
+              </span>
+            )}
+            <span className="ps-chevron">▾</span>
+          </button>
+          {chatOpen && <CoachChat />}
+        </div>
 
         {progressions.length > 0 && (
           <>
