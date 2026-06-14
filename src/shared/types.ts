@@ -47,6 +47,9 @@ export type MuscleGroup =
 /** Trainingsphase eines Mesozyklus. */
 export type BlockPhase = 'accumulation' | 'intensification' | 'peak' | 'deload';
 
+/** Wochentag-Kürzel (Mo–So) für die manuelle Tagesplanung der Sessions. */
+export type WeekDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
 /** Verlauf/Status einer Trainingseinheit oder eines Workouts. */
 export type SessionStatus = 'planned' | 'in_progress' | 'completed' | 'skipped';
 
@@ -119,6 +122,13 @@ export interface PlannedSession extends Syncable {
   name: string;
   /** Fokus-Muskelgruppen dieser Einheit (z. B. Push/Pull/Legs). */
   focus: MuscleGroup[];
+  /**
+   * Manuell (oder per Auto-Verteilung) zugeordneter Wochentag (Mo–So).
+   * Optional/abwärtskompatibel: fehlt der Wert, verteilt der scheduleService
+   * beim ersten Laden automatisch (siehe DEFAULT_TRAINING_DAYS). Persistiert
+   * als Teil des `sessions`-JSONB in gym_plan_weeks — keine Spalten-Migration.
+   */
+  scheduledDay?: WeekDay;
   exercises: PlannedExercise[];
   /** Verknüpftes tatsächlich geloggtes Workout (falls absolviert). */
   workoutId?: UUID | null;

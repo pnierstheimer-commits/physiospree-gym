@@ -33,6 +33,7 @@ import type {
   WorkoutSet,
 } from '../shared/types';
 import { generatePlan, parseMarkers } from './services/planService';
+import { ensureScheduledDays } from './services/scheduleService';
 
 // ---------------------------------------------------------------------------
 // Initialer / leerer State
@@ -104,6 +105,16 @@ interface AppContextValue {
   clearPlan: () => void;
   /** Fordert einen Plan über den planService an und pflegt loading/error/plan. */
   requestPlan: (profile: UserProfile) => Promise<void>;
+  /**
+   * Ersetzt die Sessions einer Woche (z. B. nach Drag-and-Drop-Umplanung der
+   * Wochentage). Persistiert über den normalen State-/Sync-Pfad.
+   */
+  updateWeekSessions: (weekId: string, sessions: PlannedSession[]) => void;
+  /**
+   * Füllt fehlende `scheduledDay`-Felder einmalig per Auto-Verteilung
+   * (scheduleService). No-op, wenn alle Sessions bereits terminiert sind.
+   */
+  ensureSchedule: () => void;
 
   // --- Workout-Player ---
   // activeWorkout/workoutHistory sind aus `state.workouts` abgeleitet
@@ -215,6 +226,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearPlan = useCallback<AppContextValue['clearPlan']>(() => {
     update(() => ({ currentPlan: null, parsedMarkers: [] }));
     setPlanError(null);
+  }, [update]);
+
+  /** Sessions einer Woche ersetzen (Drag-and-Drop). Bumpt Woche + Framework. */
+  const updateWeekSessions = useCallback<AppContextValue['updateWeekSessions']>(
+    (weekId, sessions) => {
+      update((prev) => {
+        if (!prev.currentPlan) return {};
+        const now = new Date().toISOString();
+        const fw = prev.currentPlan.framework;
+        const weeks = fw.weeks.map((w) =>
+          w.id === weekId ? { ...w, sessions, updatedAt: now } : w,
+        );
+        const framework = { ...fw, weeks, updatedAt: now };
+        return {
+          currentPlan: { ...prev.currentPlan, framework },
+          frameworks: prev.frameworks.map((f) => (f.id === framework.id ? framework : f)),
+        };
+      });
+    },
+    [update],
+  );
+
+  /** Auto-Verteilung fehlender Wochentage (einmalig, no-op wenn nichts fehlt). */
+  const ensureSchedule = useCallback<AppContextValue['ensureSchedule']>(() => {
+    update((prev) => {
+      if (!prev.currentPlan) return {};
+      const { framework, changed } = ensureScheduledDays(prev.currentPlan.framework);
+      if (!changed) return {};
+      const now = new Date().toISOString();
+      const fw = { ...framework, updatedAt: now };
+      return {
+        currentPlan: { ...prev.currentPlan, framework: fw },
+        frameworks: prev.frameworks.map((f) => (f.id === fw.id ? fw : f)),
+      };
+    });
   }, [update]);
 
   const requestPlan = useCallback<AppContextValue['requestPlan']>(
@@ -410,6 +456,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setPlan,
       clearPlan,
       requestPlan,
+      updateWeekSessions,
+      ensureSchedule,
       activeWorkout,
       workoutHistory,
       startWorkout,
@@ -428,6 +476,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setPlan,
       clearPlan,
       requestPlan,
+      updateWeekSessions,
+      ensureSchedule,
       activeWorkout,
       workoutHistory,
       startWorkout,

@@ -9,7 +9,7 @@
  * GESCHÜTZTE DATEI — siehe CLAUDE.md, Regel 7.
  */
 
-import type { BlockPhase, ExperienceLevel, Goal } from './types';
+import type { BlockPhase, ExperienceLevel, Goal, WeekDay } from './types';
 
 // ---------------------------------------------------------------------------
 // Wiederholungsbereiche pro Trainingsziel
@@ -103,6 +103,39 @@ export const SPLIT_BY_DAYS: Record<number, string[]> = {
   4: ['Oberkörper', 'Unterkörper', 'Oberkörper', 'Unterkörper'],
   5: ['Push', 'Pull', 'Legs', 'Oberkörper', 'Unterkörper'],
   6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs'],
+} as const;
+
+// ---------------------------------------------------------------------------
+// Wochentags-Planung (manuelle Tageszuordnung der Sessions)
+// ---------------------------------------------------------------------------
+
+/** Reihenfolge der Wochentage (Mo–So) für Anzeige und Auto-Verteilung. */
+export const WEEKDAYS: WeekDay[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+/** Kurzlabel je Wochentag (UI). */
+export const WEEKDAY_LABELS: Record<WeekDay, string> = {
+  mon: 'Mo',
+  tue: 'Di',
+  wed: 'Mi',
+  thu: 'Do',
+  fri: 'Fr',
+  sat: 'Sa',
+  sun: 'So',
+} as const;
+
+/**
+ * Standard-Trainingstage je Anzahl Tage/Woche — gleichmäßig verteilt, mit
+ * Erholung zwischen den Einheiten. Quelle für die Auto-Verteilung leerer
+ * `scheduledDay`-Felder (scheduleService). Fallback für nicht gelistete
+ * Werte: die ersten n Wochentage.
+ */
+export const DEFAULT_TRAINING_DAYS: Record<number, WeekDay[]> = {
+  1: ['mon'],
+  2: ['mon', 'thu'],
+  3: ['mon', 'wed', 'fri'],
+  4: ['mon', 'tue', 'thu', 'fri'],
+  5: ['mon', 'tue', 'wed', 'thu', 'fri'],
+  6: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
 } as const;
 
 // ---------------------------------------------------------------------------
