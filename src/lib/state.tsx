@@ -37,6 +37,7 @@ import type {
 import { generatePlan, parseMarkers } from './services/planService';
 import { ensureScheduledDays } from './services/scheduleService';
 import { requestChatReply, toParsedMarkers } from './services/chatService';
+import { applyMarkerToWeeks } from './services/markerService';
 
 // ---------------------------------------------------------------------------
 // Initialer / leerer State
@@ -157,13 +158,6 @@ interface AppContextValue {
   confirmChatMarker: (messageId: string) => void;
   /** Verwirft die Marker einer Coach-Nachricht -> status 'rejected' (nicht angewendet). */
   rejectChatMarker: (messageId: string) => void;
-}
-
-/** Übungsname aus dem notes-Feld ("Name — cue"). */
-function exerciseNameFromNotes(notes: string | undefined): string {
-  if (!notes) return '';
-  const i = notes.indexOf(' — ');
-  return i === -1 ? notes : notes.slice(0, i);
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -408,47 +402,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!prev.currentPlan) return {};
         const now = new Date().toISOString();
         const framework = prev.currentPlan.framework;
+        // Plan-Transformationen liegen im markerService (Regel 3/4). Jeder
+        // Marker faltet die Wochen weiter.
         let weeks = framework.weeks;
-
         for (const m of markers) {
-          if (m.kind === 'LOAD_ADJUSTMENT') {
-            // Last der passenden Übung (nach Name) um delta anpassen.
-            const name = typeof m.payload.exerciseName === 'string' ? m.payload.exerciseName : '';
-            const delta = typeof m.payload.delta === 'number' ? m.payload.delta : 0;
-            if (!name || !delta) continue;
-            weeks = weeks.map((w) => ({
-              ...w,
-              sessions: w.sessions.map((s) => ({
-                ...s,
-                exercises: s.exercises.map((pe) =>
-                  exerciseNameFromNotes(pe.notes) === name &&
-                  typeof pe.suggestedLoadKg === 'number'
-                    ? { ...pe, suggestedLoadKg: pe.suggestedLoadKg + delta, updatedAt: now }
-                    : pe,
-                ),
-              })),
-            }));
-          } else if (m.kind === 'DELOAD') {
-            // Nächste Woche als Deload markieren + RPE senken.
-            const target = framework.currentWeekIndex + 1;
-            weeks = weeks.map((w) =>
-              w.weekIndex !== target
-                ? w
-                : {
-                    ...w,
-                    isDeload: true,
-                    updatedAt: now,
-                    sessions: w.sessions.map((s) => ({
-                      ...s,
-                      exercises: s.exercises.map((pe) => ({ ...pe, targetRPE: 6, updatedAt: now })),
-                    })),
-                  },
-            );
-          }
-          // TODO(Phase 4): SESSION_ADJUSTMENT, EXERCISE_SWAP, EXERCISE_UPGRADE,
-          // PHASE_SHIFT, ILLNESS_RECOVERY, VACATION_MODE.
+          weeks = applyMarkerToWeeks(weeks, framework, m, now);
         }
-
         return {
           currentPlan: {
             ...prev.currentPlan,

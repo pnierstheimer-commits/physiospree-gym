@@ -51,10 +51,31 @@ function Bubble({ msg, onConfirm, onReject }: BubbleProps) {
 }
 
 export function CoachChat() {
-  const { chatMessages, chatLoading, chatError, sendChatMessage, confirmChatMarker, rejectChatMarker } =
-    useApp();
+  const {
+    chatMessages,
+    chatLoading,
+    chatError,
+    sendChatMessage,
+    confirmChatMarker,
+    rejectChatMarker,
+    activeWorkout,
+  } = useApp();
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+
+  // Plan-Anpassung während eines laufenden Workouts: nachfragen (WICHTIG).
+  const guardedConfirm = (id: string) => {
+    if (
+      activeWorkout &&
+      !window.confirm(
+        'Du hast ein laufendes Workout. Plan-Anpassung jetzt übernehmen? ' +
+          '(Abbrechen = später nach dem Workout bestätigen.)',
+      )
+    ) {
+      return;
+    }
+    confirmChatMarker(id);
+  };
 
   // Bei neuer Nachricht / Tippanzeige ans Ende scrollen.
   useEffect(() => {
@@ -75,7 +96,7 @@ export function CoachChat() {
           <div className="ps-chat-empty">Schreib dem Coach. Tagesform, Frage, Feedback.</div>
         ) : (
           chatMessages.map((m) => (
-            <Bubble key={m.id} msg={m} onConfirm={confirmChatMarker} onReject={rejectChatMarker} />
+            <Bubble key={m.id} msg={m} onConfirm={guardedConfirm} onReject={rejectChatMarker} />
           ))
         )}
         {chatLoading && (
