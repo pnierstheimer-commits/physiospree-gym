@@ -44,6 +44,11 @@ function buildNotes(name: string, cue: string): string {
   return cue ? `${name} — ${cue}` : name;
 }
 
+/** Auf 2,5-kg-Schritte runden (nie negativ). */
+function round25(x: number): number {
+  return Math.max(0, Math.round(x / 2.5) * 2.5);
+}
+
 function mapWeeks(
   weeks: PlanWeek[],
   pred: (w: PlanWeek) => boolean,
@@ -225,6 +230,62 @@ function exerciseSwap(
 }
 
 // ---------------------------------------------------------------------------
+// Last-Rampe (geteilt von ILLNESS_RECOVERY und VACATION_MODE)
+// Senkt die Last ab `fromWeek` und steigt linear über `rampWeeks` Wochen
+// zurück auf 100% (Wo0: returnLoad … Wo[rampWeeks]: 100%). 2,5-kg-Raster.
+// rampWeeks <= 0 -> nur eine reduzierte Woche (returnLoad), keine Rampe.
+// ---------------------------------------------------------------------------
+
+function rampLoad(
+  weeks: PlanWeek[],
+  fromWeek: number,
+  returnLoad: number,
+  rampWeeks: number,
+  now: string,
+): PlanWeek[] {
+  const steps = Math.max(0, Math.floor(rampWeeks));
+  const lastOffset = steps <= 0 ? 0 : steps - 1; // Wochen unter 100%
+  const factorFor = (offset: number): number =>
+    steps <= 0 ? returnLoad : returnLoad + (1 - returnLoad) * (offset / steps);
+
+  return weeks.map((w) => {
+    const off = w.weekIndex - fromWeek;
+    if (off < 0 || off > lastOffset) return w;
+    const factor = factorFor(off);
+    if (factor >= 1) return w;
+    return {
+      ...w,
+      updatedAt: now,
+      sessions: w.sessions.map((s) => ({
+        ...s,
+        exercises: s.exercises.map((pe) =>
+          typeof pe.suggestedLoadKg === 'number'
+            ? { ...pe, suggestedLoadKg: round25(pe.suggestedLoadKg * factor), updatedAt: now }
+            : pe,
+        ),
+      })),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ILLNESS_RECOVERY — Last senken + Wiederaufbau-Rampe
+// payload: { weeksOff, returnLoad (0.8 = -20%), rampWeeks (2) }
+// ---------------------------------------------------------------------------
+
+function illnessRecovery(
+  weeks: PlanWeek[],
+  framework: PlanFramework,
+  marker: ParsedMarker,
+  now: string,
+): PlanWeek[] {
+  const returnLoad = asNum(marker.payload.returnLoad, 0.8);
+  const rampWeeks = asNum(marker.payload.rampWeeks, 2);
+  if (returnLoad >= 1) return weeks; // keine Reduktion gewünscht
+  return rampLoad(weeks, framework.currentWeekIndex, returnLoad, rampWeeks, now);
+}
+
+// ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
 
@@ -248,6 +309,8 @@ export function applyMarkerToWeeks(
       return sessionAdjustment(weeks, framework, marker, now);
     case 'EXERCISE_SWAP':
       return exerciseSwap(weeks, framework, marker, now);
+    case 'ILLNESS_RECOVERY':
+      return illnessRecovery(weeks, framework, marker, now);
     default:
       return weeks;
   }
