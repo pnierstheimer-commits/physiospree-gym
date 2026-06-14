@@ -6,6 +6,11 @@ import { LoginScreen } from './screens/LoginScreen'
 import { OnboardingScreen } from './screens/OnboardingScreen'
 import { PlanScreen } from './screens/PlanScreen'
 import { WorkoutScreen } from './screens/WorkoutScreen'
+import { TodayScreen } from './screens/TodayScreen'
+import { CoachScreen } from './screens/CoachScreen'
+import { JournalScreen } from './screens/JournalScreen'
+import { BottomNav } from './components/BottomNav'
+import type { ReactNode } from 'react'
 
 function Splash() {
   return (
@@ -22,7 +27,7 @@ function Splash() {
 
 function App() {
   const auth = useAuth()
-  const { state, replaceState, resetState, currentPlan, activeWorkout } = useApp()
+  const { state, replaceState, resetState, currentPlan, activeWorkout, activeTab } = useApp()
   const userId = auth.user?.id ?? null
 
   // Verhindert mehrfaches Sync pro Login (syncedFor = bereits gesyncte userId).
@@ -67,12 +72,36 @@ function App() {
   if (auth.loading) return <Splash />
   if (!auth.session) return <LoginScreen sendOtp={auth.sendOtp} verifyOtp={auth.verifyOtp} />
 
-  // Eingeloggt: aktives Workout hat Vorrang, sonst Plan, sonst Onboarding.
+  // Aktives Workout hat Vorrang und blendet die Bottom-Nav aus (Fokus beim Training).
   if (activeWorkout) return <WorkoutScreen />
-  return currentPlan ? (
-    <PlanScreen onSignOut={handleSignOut} />
-  ) : (
-    <OnboardingScreen onSignOut={handleSignOut} />
+
+  // Tab-gesteuerte Screens + immer sichtbare Bottom-Nav.
+  let screen: ReactNode
+  switch (activeTab) {
+    case 'plan':
+      screen = currentPlan ? (
+        <PlanScreen onSignOut={handleSignOut} />
+      ) : (
+        <OnboardingScreen onSignOut={handleSignOut} />
+      )
+      break
+    case 'coach':
+      screen = <CoachScreen />
+      break
+    case 'journal':
+      screen = <JournalScreen />
+      break
+    case 'today':
+    default:
+      screen = <TodayScreen onSignOut={handleSignOut} />
+      break
+  }
+
+  return (
+    <div className="ps-tabbed">
+      {screen}
+      <BottomNav />
+    </div>
   )
 }
 

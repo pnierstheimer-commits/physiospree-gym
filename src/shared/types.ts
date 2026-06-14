@@ -362,6 +362,9 @@ export interface PlanResponse {
 // Persistenz (localStorage / Sync-Snapshot)
 // ---------------------------------------------------------------------------
 
+/** Aktiver Tab der Bottom-Navigation (UI-State, lokal persistiert). */
+export type AppTab = 'today' | 'plan' | 'coach' | 'journal';
+
 /** Vollständiger App-State, wie er persistiert und synchronisiert wird. */
 export interface PersistedState {
   /** Schemaversion für Migrationen. */
@@ -390,4 +393,6 @@ export interface PersistedState {
   parsedMarkers: ParsedMarker[];
   /** Persistenter Coach-Chat-Verlauf (append-only). */
   chatMessages: ChatMessage[];
+  /** Aktiver Bottom-Nav-Tab (lokal persistiert, nicht gesynct). */
+  activeTab: AppTab;
 }

@@ -493,6 +493,7 @@ function basePersisted(): PersistedState {
     currentPlan: null,
     parsedMarkers: [],
     chatMessages: [],
+    activeTab: 'today',
   };
 }
 

@@ -23,6 +23,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { SCHEMA_VERSION, STORAGE_KEY } from '../shared/constants';
 import type {
+  AppTab,
   ChatMessage,
   ChatMessageStatus,
   ParsedMarker,
@@ -58,6 +59,7 @@ function emptyState(): PersistedState {
     currentPlan: null,
     parsedMarkers: [],
     chatMessages: [],
+    activeTab: 'today',
   };
 }
 
@@ -161,6 +163,12 @@ interface AppContextValue {
   confirmChatMarker: (messageId: string, scope?: 'this_week' | 'permanent') => void;
   /** Verwirft die Marker einer Coach-Nachricht -> status 'rejected' (nicht angewendet). */
   rejectChatMarker: (messageId: string) => void;
+
+  // --- Bottom-Nav ---
+  /** Aktiver Tab. */
+  activeTab: AppTab;
+  /** Wechselt den Tab (persistiert über den State). */
+  setActiveTab: (tab: AppTab) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -538,6 +546,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [updateChatMessageStatus],
   );
 
+  const setActiveTab = useCallback<AppContextValue['setActiveTab']>(
+    (tab) => {
+      update(() => ({ activeTab: tab }));
+    },
+    [update],
+  );
+
   const activeWorkout = state.workouts.find((w) => w.status === 'in_progress') ?? null;
   const workoutHistory = state.workouts.filter(
     (w) => w.status === 'completed' || w.status === 'skipped',
@@ -570,6 +585,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sendChatMessage,
       confirmChatMarker,
       rejectChatMarker,
+      activeTab: state.activeTab,
+      setActiveTab,
     }),
     [
       state,
@@ -595,6 +612,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sendChatMessage,
       confirmChatMarker,
       rejectChatMarker,
+      setActiveTab,
     ],
   );
 
