@@ -917,3 +917,166 @@
   color: hsl(var(--muted-foreground));
   margin: 0;
 }
+
+/* === Rolling-Window-Banner ============================================ */
+
+.ps-window-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: hsl(var(--status-yellow-soft));
+  border: 1px solid hsl(var(--status-yellow) / 0.35);
+  border-radius: 1rem;
+  padding: 14px 16px;
+  margin: 4px 0 4px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: hsl(var(--foreground));
+}
+.ps-window-banner.is-error {
+  background: hsl(var(--status-red-soft));
+  border-color: hsl(var(--status-red) / 0.35);
+  justify-content: space-between;
+}
+.ps-window-detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.ps-window-retry {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid hsl(var(--status-red) / 0.4);
+  background: transparent;
+  color: hsl(var(--status-red));
+  border-radius: 9999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ps-spinner-sm {
+  width: 26px;
+  height: 26px;
+  border-width: 3px;
+  flex: 0 0 auto;
+}
+
+/* === Progression ====================================================== */
+
+.ps-prog-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 21px;
+  letter-spacing: -0.01em;
+  color: hsl(var(--foreground));
+  margin: 32px 0 12px;
+}
+.ps-prog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ps-prog {
+  font-size: 14px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+.ps-prog-name {
+  color: hsl(var(--foreground));
+  font-weight: 500;
+}
+.ps-prog.is-up .ps-prog-seq {
+  color: hsl(var(--status-green));
+  font-weight: 500;
+}
+.ps-prog-count {
+  font-size: 13px;
+}
+
+/* === Workout-Historie ================================================= */
+
+.ps-history {
+  margin-top: 32px;
+}
+.ps-history-head {
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-top: 1px solid hsl(var(--border) / 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 4px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.ps-history.is-open .ps-chevron {
+  transform: rotate(180deg);
+}
+.ps-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.ps-hist-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  overflow: hidden;
+}
+.ps-hist-row {
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  text-align: left;
+}
+.ps-hist-date {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+.ps-hist-name {
+  flex: 1 1 auto;
+  font-size: 15px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+.ps-hist-rpe {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.ps-hist-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px 14px;
+}
+.ps-hist-ex {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.ps-hist-ex-name {
+  color: hsl(var(--foreground));
+}
+.ps-hist-ex-sets {
+  color: hsl(var(--muted-foreground));
+  text-align: right;
+}

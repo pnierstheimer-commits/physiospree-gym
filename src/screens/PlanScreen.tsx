@@ -12,14 +12,17 @@
  * Platzhalter ist. "Level" ist nirgends persistiert und wird weggelassen.
  */
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../lib/state';
+import { requestNextWindow, shouldGenerateNextWindow } from '../lib/services/windowService';
 import type {
   BlockPhase,
   CoachAction,
   Goal,
   PlannedExercise,
   PlanWeek,
+  Workout,
+  WorkoutExercise,
 } from '../shared/types';
 import './screens.css';
 
@@ -123,10 +126,102 @@ function isCalibration(name: string): boolean {
   return /kalibr/i.test(name);
 }
 
+/** Deutsche kg-Schreibweise (42.5 -> "42,5"). */
+function fmtKg(n: number): string {
+  return String(n).replace('.', ',');
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+}
+
+/** Durchschnitts-RPE aus den Arbeitssätzen (Auswertung wird nicht persistiert). */
+function avgRpe(w: Workout): number | null {
+  const rpes = w.exercises.flatMap((e) =>
+    e.sets.filter((s) => !s.isWarmup && typeof s.rpe === 'number').map((s) => s.rpe as number),
+  );
+  if (rpes.length === 0) return null;
+  return Math.round((rpes.reduce((a, b) => a + b, 0) / rpes.length) * 10) / 10;
+}
+
+/** Kompakte Ist-Werte einer geloggten Übung. */
+function loggedSetsLine(we: WorkoutExercise): string {
+  const sets = [...we.sets].sort((a, b) => a.setNumber - b.setNumber);
+  if (sets.length === 0) return 'keine Sätze';
+  const reps = sets.map((s) => s.reps).join('/');
+  const rpe = sets[0].rpe;
+  return `${fmtKg(sets[0].weightKg)} kg × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
+}
+
+interface Progression {
+  name: string;
+  weights: number[];
+  count: number;
+}
+
+/** Last-Verlauf je Übung über die abgeschlossenen Workouts (nur Veränderungen). */
+function computeProgressions(history: Workout[]): Progression[] {
+  const completed = history
+    .filter((w) => w.status === 'completed')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const byName = new Map<string, number[]>();
+  for (const w of completed) {
+    for (const we of w.exercises) {
+      const name = splitExercise(we.notes).name;
+      const working = we.sets.filter((s) => !s.isWarmup).map((s) => s.weightKg);
+      if (working.length === 0) continue;
+      const top = Math.max(...working);
+      const arr = byName.get(name) ?? [];
+      arr.push(top);
+      byName.set(name, arr);
+    }
+  }
+
+  const out: Progression[] = [];
+  for (const [name, all] of byName) {
+    const seq: number[] = [];
+    for (const v of all) if (seq.length === 0 || seq[seq.length - 1] !== v) seq.push(v);
+    if (seq.length >= 2 && seq[0] !== seq[seq.length - 1]) {
+      out.push({ name, weights: seq, count: all.length });
+    }
+  }
+  return out;
+}
+
 export function PlanScreen() {
-  const { currentPlan, clearPlan, startWorkout } = useApp();
+  const { currentPlan, clearPlan, startWorkout, setPlan, workoutHistory } = useApp();
   // Default: erste Woche offen; -1 = alle zu (Akkordeon).
   const [openWeek, setOpenWeek] = useState(0);
+  const [openHistory, setOpenHistory] = useState(false);
+  const [openWorkoutId, setOpenWorkoutId] = useState<string | null>(null);
+  const [windowState, setWindowState] = useState<'idle' | 'generating' | 'error'>('idle');
+  const [windowError, setWindowError] = useState<string | null>(null);
+
+  const runWindow = useCallback(() => {
+    if (!currentPlan) return;
+    setWindowState('generating');
+    setWindowError(null);
+    requestNextWindow(currentPlan, workoutHistory)
+      .then((updated) => {
+        setPlan(updated);
+        setWindowState('idle');
+      })
+      .catch((err) => {
+        setWindowError(err instanceof Error ? err.message : 'Unbekannter Fehler.');
+        setWindowState('error');
+      });
+  }, [currentPlan, workoutHistory, setPlan]);
+
+  // Nach dem Laden prüfen, ob das nächste Fenster fällig ist. Guard über
+  // windowState (StrictMode-fest), runWindow deferred (kein sync setState).
+  // Nach Erfolg hat der Plan das nächste Fenster -> shouldGenerate wird false.
+  useEffect(() => {
+    if (!currentPlan || windowState !== 'idle') return;
+    if (!shouldGenerateNextWindow(currentPlan, workoutHistory)) return;
+    const id = setTimeout(runWindow, 0);
+    return () => clearTimeout(id);
+  }, [currentPlan, workoutHistory, windowState, runWindow]);
 
   if (!currentPlan) {
     return (
@@ -142,6 +237,13 @@ export function PlanScreen() {
   const split = extractSplit(currentPlan.actions);
   const blocks = deriveBlocks(fw.weeks, fw.currentWeekIndex);
   const weeks = [...fw.weeks].sort((a, b) => a.weekIndex - b.weekIndex);
+
+  const progressions = computeProgressions(workoutHistory);
+  const recentWorkouts = [...workoutHistory]
+    .filter((w) => w.status === 'completed')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 10);
+  const firstWeekNo = (weeks[0]?.weekIndex ?? 0) + 1;
 
   const toggleWeek = (i: number) => setOpenWeek((prev) => (prev === i ? -1 : i));
 
@@ -161,6 +263,26 @@ export function PlanScreen() {
           {split && <span className="ps-pill">{split}</span>}
           <span className="ps-pill ps-pill-muted">{fw.cycleLengthWeeks} Wochen</span>
         </div>
+
+        {windowState === 'generating' && (
+          <div className="ps-window-banner">
+            <div className="ps-spinner ps-spinner-sm" aria-hidden="true" />
+            <span>
+              Woche {firstWeekNo} abgeschlossen. Nächste 2 Wochen werden generiert …
+            </span>
+          </div>
+        )}
+        {windowState === 'error' && (
+          <div className="ps-window-banner is-error">
+            <div>
+              <div>Konnte nächste Wochen nicht laden.</div>
+              {windowError && <small className="ps-window-detail">{windowError}</small>}
+            </div>
+            <button type="button" className="ps-window-retry" onClick={runWindow}>
+              Nochmal versuchen
+            </button>
+          </div>
+        )}
 
         <div className="ps-section-label">Blöcke</div>
         <div className="ps-blocks">
@@ -191,6 +313,24 @@ export function PlanScreen() {
             </div>
           ))}
         </div>
+
+        {progressions.length > 0 && (
+          <>
+            <div className="ps-prog-title">Progression</div>
+            <div className="ps-prog-list">
+              {progressions.map((p) => {
+                const up = p.weights[p.weights.length - 1] > p.weights[0];
+                return (
+                  <div key={p.name} className={`ps-prog${up ? ' is-up' : ''}`}>
+                    <span className="ps-prog-name">{p.name}:</span>{' '}
+                    <span className="ps-prog-seq">{p.weights.map(fmtKg).join(' → ')} kg</span>{' '}
+                    <span className="ps-prog-count">({p.count} Einheiten)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {/* B) Detail-Wochen */}
         <div className="ps-section-label">Wochen im Detail</div>
@@ -259,6 +399,56 @@ export function PlanScreen() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Letzte Workouts */}
+        {recentWorkouts.length > 0 && (
+          <div className={`ps-history${openHistory ? ' is-open' : ''}`}>
+            <button
+              type="button"
+              className="ps-history-head"
+              onClick={() => setOpenHistory((o) => !o)}
+              aria-expanded={openHistory}
+            >
+              <span>Letzte Workouts</span>
+              <span className="ps-chevron">▾</span>
+            </button>
+            {openHistory && (
+              <div className="ps-history-list">
+                {recentWorkouts.map((w) => {
+                  const rpe = avgRpe(w);
+                  const expanded = openWorkoutId === w.id;
+                  return (
+                    <div key={w.id} className="ps-hist-card">
+                      <button
+                        type="button"
+                        className="ps-hist-row"
+                        onClick={() => setOpenWorkoutId((id) => (id === w.id ? null : w.id))}
+                      >
+                        <span className="ps-hist-date">{formatDate(w.date)}</span>
+                        <span className="ps-hist-name">{w.name}</span>
+                        <span className="ps-hist-rpe">{rpe != null ? `Ø RPE ${rpe}` : '—'}</span>
+                      </button>
+                      {expanded && (
+                        <div className="ps-hist-details">
+                          {[...w.exercises]
+                            .sort((a, b) => a.order - b.order)
+                            .map((we) => (
+                              <div key={we.id} className="ps-hist-ex">
+                                <span className="ps-hist-ex-name">
+                                  {splitExercise(we.notes).name}
+                                </span>
+                                <span className="ps-hist-ex-sets">{loggedSetsLine(we)}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

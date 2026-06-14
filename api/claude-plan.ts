@@ -37,6 +37,7 @@ import type {
   PlannedExercise,
   PlannedSession,
   UserProfile,
+  Workout,
 } from '../src/shared/types';
 
 export const config = { runtime: 'nodejs', maxDuration: 60 };
@@ -309,18 +310,17 @@ function toFocus(values: string[]): MuscleGroup[] {
   return out;
 }
 
-function buildFramework(
-  plan: NormPlan,
-  profile: UserProfile,
-  effectiveGoal: Goal,
-  segment: CoachSegment,
-  cycleLengthWeeks: number,
-  coachVersion: string,
+/**
+ * Mappt NormWeek[] -> PlanWeek[]. `weekIndexFor` bestimmt den Wochenindex
+ * (Neustart: aus der Norm-Woche; Window: fortlaufend ans bestehende Framework).
+ */
+function mapDetailWeeks(
+  detailWeeks: NormWeek[],
+  frameworkId: string,
   now: string,
-): PlanFramework {
-  const frameworkId = uuidv4();
-
-  const weeks: PlanWeek[] = plan.detailWeeks.map((w) => {
+  weekIndexFor: (w: NormWeek, i: number) => number,
+): PlanWeek[] {
+  return detailWeeks.map((w, wi) => {
     const weekId = uuidv4();
     const sessions: PlannedSession[] = w.sessions.map((s) => {
       const sessionId = uuidv4();
@@ -363,13 +363,26 @@ function buildFramework(
       updatedAt: now,
       deletedAt: null,
       frameworkId,
-      weekIndex: w.weekIndex,
+      weekIndex: weekIndexFor(w, wi),
       phase: w.phase,
       intensityFactor: w.intensityFactor,
       isDeload: w.isDeload,
       sessions,
     };
   });
+}
+
+function buildFramework(
+  plan: NormPlan,
+  profile: UserProfile,
+  effectiveGoal: Goal,
+  segment: CoachSegment,
+  cycleLengthWeeks: number,
+  coachVersion: string,
+  now: string,
+): PlanFramework {
+  const frameworkId = uuidv4();
+  const weeks = mapDetailWeeks(plan.detailWeeks, frameworkId, now, (w) => w.weekIndex);
 
   return {
     id: frameworkId,
@@ -486,6 +499,95 @@ function buildUserPrompt(
 }
 
 // ---------------------------------------------------------------------------
+// Window-Update: User-Prompt für die nächsten 2 Wochen
+// ---------------------------------------------------------------------------
+
+/** Übungsname aus dem notes-Feld ("Name — cue"). */
+function summarizeName(notes: string | undefined): string {
+  if (!notes) return 'Übung';
+  const i = notes.indexOf(' — ');
+  return i === -1 ? notes : notes.slice(0, i);
+}
+
+function buildWindowUserPrompt(
+  existingPlan: PlanResponse,
+  completedWorkouts: Workout[],
+  segment: CoachSegment,
+  cycleLengthWeeks: number,
+): string {
+  const fw = existingPlan.framework;
+  const existingWeeks = [...fw.weeks].sort((a, b) => a.weekIndex - b.weekIndex);
+  const lastIndex = existingWeeks.length
+    ? Math.max(...existingWeeks.map((w) => w.weekIndex))
+    : -1;
+  const nextA = lastIndex + 2; // 1-basiert für die Anzeige
+  const nextB = lastIndex + 3;
+
+  const lines: string[] = [];
+  lines.push('ROLLING-WINDOW-UPDATE: Generiere die nächsten 2 Detail-Wochen — KEINEN neuen Plan.');
+  lines.push('');
+  lines.push(
+    `Segment: ${SEGMENT_LABEL[segment]} | Zykluslänge: ${cycleLengthWeeks} Wochen | Plan: ${fw.name}`,
+  );
+  lines.push(
+    `Bereits ausdetailliert: Woche 1–${lastIndex + 1}. Jetzt gefragt: Woche ${nextA} und ${nextB}.`,
+  );
+  lines.push('');
+  lines.push('BISHERIGES FRAMEWORK (Wochen, Phasen, Übungen mit Zielen):');
+  for (const w of existingWeeks) {
+    lines.push(`Woche ${w.weekIndex + 1} | Phase ${w.phase}${w.isDeload ? ' (Deload)' : ''}`);
+    for (const s of [...w.sessions].sort((a, b) => a.dayIndex - b.dayIndex)) {
+      lines.push(`  Tag ${s.dayIndex + 1} — ${s.name}`);
+      for (const pe of [...s.exercises].sort((a, b) => a.order - b.order)) {
+        const reps =
+          pe.targetReps[0] === pe.targetReps[1]
+            ? `${pe.targetReps[0]}`
+            : `${pe.targetReps[0]}–${pe.targetReps[1]}`;
+        lines.push(
+          `    ${summarizeName(pe.notes)}: ${pe.targetSets}×${reps} @ ${pe.suggestedLoadKg ?? '—'} kg, RPE ${pe.targetRPE}`,
+        );
+      }
+    }
+  }
+  lines.push('');
+  lines.push('WORKOUT-ERGEBNISSE (geloggte Sätze):');
+  if (completedWorkouts.length === 0) {
+    lines.push('  (keine abgeschlossenen Workouts übergeben)');
+  } else {
+    for (const wo of completedWorkouts) {
+      lines.push(`Einheit: ${wo.name}`);
+      for (const we of [...wo.exercises].sort((a, b) => a.order - b.order)) {
+        const sets = [...we.sets].sort((a, b) => a.setNumber - b.setNumber);
+        const txt = sets.map((s) => `${s.weightKg}kg×${s.reps}@${s.rpe ?? '-'}`).join(', ');
+        lines.push(`  ${summarizeName(we.notes)}: ${txt || 'keine Sätze'}`);
+      }
+    }
+  }
+  lines.push('');
+  lines.push('AUFGABE');
+  lines.push(
+    `Wende die Progressionsregeln (2-für-2 bzw. segmentspezifisch) auf die Ergebnisse an und ` +
+      `generiere Woche ${nextA} und ${nextB} im Detail. Block-Phase passend zur Position im ` +
+      `${cycleLengthWeeks}-Wochen-Zyklus (Deload nur als letzte Woche). Keine Kalibrierung mehr.`,
+  );
+  lines.push('');
+  lines.push('AUSGABE');
+  lines.push(
+    'Antworte mit GENAU einem ```json-Block in dieser Struktur (framework wiederholen, ' +
+      `detailWeeks = die 2 NEUEN Wochen mit weekIndex ${lastIndex + 1} und ${lastIndex + 2}):`,
+  );
+  lines.push('```json');
+  lines.push(OUTPUT_SCHEMA);
+  lines.push('```');
+  lines.push(
+    'Pflichten: detailWeeks = genau die 2 neuen Wochen; je Übung repRange/targetRPE/restSeconds/cue; ' +
+      'suggestedLoadKg gesetzt (Progression eingerechnet); keine "calibration".',
+  );
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // HTTP-Helfer
 // ---------------------------------------------------------------------------
 
@@ -512,17 +614,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // 1) Request lesen + minimal validieren.
-  // @vercel/node parst JSON-Bodies automatisch; bei String selbst parsen.
-  let request: PlanRequest;
+  // 1) Request lesen. existingPlan/completedWorkouts sind Window-Extras (nicht
+  // in PlanRequest, da types.ts geschützt) -> per Cast lesen.
+  let reqBody: PlanRequest & { existingPlan?: PlanResponse; completedWorkouts?: Workout[] };
   try {
-    request = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as PlanRequest;
+    reqBody = ((typeof req.body === 'string' ? JSON.parse(req.body) : req.body) ?? {}) as typeof reqBody;
   } catch {
     sendJson(res, 400, { error: 'bad_request', message: 'Body ist kein gültiges JSON.' });
     return;
   }
 
-  const profile = request?.profile;
+  const profile = reqBody.profile;
   if (!profile?.userId || !profile.goal || !profile.experience || !profile.daysPerWeek) {
     sendJson(res, 400, {
       error: 'bad_request',
@@ -531,32 +633,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // 2) Segment + Guard + Zykluslänge (deterministisch aus constants.ts)
-  let segment = goalToSegment(profile.goal);
-  let effectiveGoal: Goal = profile.goal;
+  const existingPlan = reqBody.existingPlan;
+  const isWindow = !!(
+    existingPlan?.framework &&
+    Array.isArray(existingPlan.framework.weeks) &&
+    existingPlan.framework.weeks.length > 0
+  );
+
+  // 2) Segment / Zykluslänge / User-Prompt — je nach Modus.
+  let segment: CoachSegment;
+  let effectiveGoal: Goal;
+  let cycleLengthWeeks: number;
   let redirected = false;
+  let userPrompt: string;
 
-  if (segment === 'strength' && profile.experience === 'beginner') {
-    redirected = true;
-    segment = 'hypertrophy';
-    effectiveGoal = 'hypertrophy';
+  if (isWindow && existingPlan) {
+    // Window-Update: alles aus dem bestehenden Framework, kein Guard/Redirect.
+    segment = goalToSegment(existingPlan.framework.goal);
+    effectiveGoal = existingPlan.framework.goal;
+    cycleLengthWeeks = existingPlan.framework.cycleLengthWeeks;
+    userPrompt = buildWindowUserPrompt(
+      existingPlan,
+      reqBody.completedWorkouts ?? [],
+      segment,
+      cycleLengthWeeks,
+    );
+  } else {
+    // Neustart: Guard (Maximalkraft+Beginner) + Zykluslänge aus constants.ts.
+    segment = goalToSegment(profile.goal);
+    effectiveGoal = profile.goal;
+    if (segment === 'strength' && profile.experience === 'beginner') {
+      redirected = true;
+      segment = 'hypertrophy';
+      effectiveGoal = 'hypertrophy';
+    }
+    const len = CYCLE_LENGTH_WEEKS[segment][profile.experience];
+    if (len == null) {
+      redirected = true;
+      segment = 'hypertrophy';
+      effectiveGoal = 'hypertrophy';
+      cycleLengthWeeks = CYCLE_LENGTH_WEEKS.hypertrophy[profile.experience] ?? 8;
+    } else {
+      cycleLengthWeeks = len;
+    }
+    userPrompt = buildUserPrompt(profile, reqBody, segment, cycleLengthWeeks, redirected);
   }
 
-  let cycleLengthWeeks = CYCLE_LENGTH_WEEKS[segment][profile.experience];
-  if (cycleLengthWeeks == null) {
-    // Defensive Absicherung: jede unzulässige Kombination -> Hypertrophie.
-    redirected = true;
-    segment = 'hypertrophy';
-    effectiveGoal = 'hypertrophy';
-    cycleLengthWeeks = CYCLE_LENGTH_WEEKS.hypertrophy[profile.experience] ?? 8;
-  }
-
-  // 3) Prompt bauen + Claude rufen
+  // 3) Claude rufen
   const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
   let raw: string;
   try {
     const systemPrompt = buildSystemPrompt(segment);
-    const userPrompt = buildUserPrompt(profile, request, segment, cycleLengthWeeks, redirected);
 
     const client = new Anthropic();
     const message = await client.messages.create({
@@ -602,9 +729,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     throw err;
   }
 
-  // 5) Vollständige PlanResponse bauen
+  // 5) PlanResponse bauen
   const now = new Date().toISOString();
   const coachVersion = `${model}/plan-v1`;
+
+  // 5a) Window-Update: neue Wochen ans bestehende Framework anhängen.
+  if (isWindow && existingPlan) {
+    const fw = existingPlan.framework;
+    const existingMax = Math.max(...fw.weeks.map((w) => w.weekIndex));
+    const newWeeks = mapDetailWeeks(plan.detailWeeks, fw.id, now, (_w, i) => existingMax + 1 + i);
+    const framework: PlanFramework = {
+      ...fw,
+      weeks: [...fw.weeks, ...newWeeks],
+      updatedAt: now,
+    };
+    const windowAction: CoachAction = {
+      id: uuidv4(),
+      updatedAt: now,
+      deletedAt: null,
+      userId: fw.userId,
+      type: 'maintain',
+      rationale:
+        plan.coachMessage ||
+        `Nächste 2 Wochen generiert (Woche ${existingMax + 2}–${existingMax + 3}).`,
+      targetId: fw.id,
+      payload: {
+        kind: 'window_generated',
+        fromWeek: existingMax + 2,
+        toWeek: existingMax + 3,
+        coachVersion,
+      },
+      accepted: null,
+      createdAt: now,
+    };
+    sendJson(res, 200, {
+      framework,
+      actions: [...existingPlan.actions, windowAction],
+    } satisfies PlanResponse);
+    return;
+  }
+
+  // 5b) Neustart: vollständiges Framework.
   const framework = buildFramework(
     plan,
     profile,
