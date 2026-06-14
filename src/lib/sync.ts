@@ -15,8 +15,10 @@
 import { getSupabase } from './supabaseClient';
 import { SCHEMA_VERSION } from '../shared/constants';
 import type {
+  ChatMessage,
   CheckinData,
   CoachAction,
+  ParsedMarker,
   PersistedState,
   PlanFramework,
   PlanResponse,
@@ -360,6 +362,36 @@ function rowToAction(r: Row): CoachAction {
 }
 
 // ---------------------------------------------------------------------------
+// Mapper: ChatMessage (Coach-Chat, append-only)
+// ---------------------------------------------------------------------------
+
+function chatToRow(c: ChatMessage, userId: string): Row {
+  return {
+    id: c.id,
+    user_id: userId,
+    role: c.role,
+    content: c.content,
+    proposed_markers: c.proposedMarkers ?? null,
+    status: c.status ?? null,
+    created_at: c.createdAt,
+    updated_at: c.updatedAt,
+  };
+}
+
+function rowToChat(r: Row): ChatMessage {
+  const m: ChatMessage = {
+    id: str(r.id),
+    role: r.role === 'coach' ? 'coach' : 'user',
+    content: str(r.content),
+    createdAt: str(r.created_at),
+    updatedAt: str(r.updated_at),
+  };
+  if (Array.isArray(r.proposed_markers)) m.proposedMarkers = r.proposed_markers as ParsedMarker[];
+  if (typeof r.status === 'string') m.status = r.status as ChatMessage['status'];
+  return m;
+}
+
+// ---------------------------------------------------------------------------
 // Sammeln aus dem State
 // ---------------------------------------------------------------------------
 
@@ -436,6 +468,9 @@ export async function pushChanges(userId: string, state: PersistedState): Promis
   e = await upsert('gym_coach_actions', collectActions(state).map((a) => actionToRow(a, userId)));
   if (e) return fail(e);
 
+  e = await upsert('gym_chat_messages', state.chatMessages.map((c) => chatToRow(c, userId)));
+  if (e) return fail(e);
+
   return { ok: true, pushed, pulled: 0, syncedAt: now };
 }
 
@@ -457,6 +492,7 @@ function basePersisted(): PersistedState {
     exercises: [],
     currentPlan: null,
     parsedMarkers: [],
+    chatMessages: [],
   };
 }
 
@@ -466,7 +502,7 @@ export async function pullChanges(userId: string): Promise<PersistedState> {
   if (!supabase) return base;
 
   const table = (name: string) => supabase.from(name).select('*').eq('user_id', userId);
-  const [profiles, frameworks, weeks, workouts, exercises, sets, checkins, actions] =
+  const [profiles, frameworks, weeks, workouts, exercises, sets, checkins, actions, chat] =
     await Promise.all([
       table('gym_user_profiles'),
       table('gym_plan_frameworks'),
@@ -476,6 +512,7 @@ export async function pullChanges(userId: string): Promise<PersistedState> {
       table('gym_workout_sets'),
       table('gym_checkins'),
       table('gym_coach_actions'),
+      table('gym_chat_messages'),
     ]);
 
   const profileRow = (profiles.data as Row[] | null)?.[0];
@@ -491,6 +528,7 @@ export async function pullChanges(userId: string): Promise<PersistedState> {
   );
   base.checkins = ((checkins.data as Row[]) ?? []).map(rowToCheckin);
   base.coachActions = ((actions.data as Row[]) ?? []).map(rowToAction);
+  base.chatMessages = ((chat.data as Row[]) ?? []).map(rowToChat);
 
   // currentPlan = aktives Framework (Fallback: zuletzt aktualisiert) + dessen Actions.
   const active =
@@ -541,6 +579,7 @@ function mergeStates(local: PersistedState, server: PersistedState): PersistedSt
     workouts: mergeById(local.workouts, server.workouts), // append-only Union
     checkins: mergeById(local.checkins, server.checkins),
     coachActions: mergeById(local.coachActions, server.coachActions),
+    chatMessages: mergeById(local.chatMessages, server.chatMessages),
     currentPlan: mergePlan(local.currentPlan, server.currentPlan),
     // Lokale-only Felder (markers, parsedMarkers, exercises) bleiben aus local.
     schemaVersion: SCHEMA_VERSION,

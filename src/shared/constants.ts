@@ -269,7 +269,8 @@ export const BLOCK_STRUCTURE: {
 
 // v2: PlanFramework um `cycleLengthWeeks` erweitert (Rule 7, Breaking Change).
 // v3: PersistedState um `currentPlan` + `parsedMarkers` erweitert.
-export const SCHEMA_VERSION = 3;
+// v4: PersistedState um `chatMessages` (Coach-Chat) erweitert.
+export const SCHEMA_VERSION = 4;
 
 /** localStorage-Schlüssel für den persistierten App-State. */
 export const STORAGE_KEY = 'physiospree.state.v1';

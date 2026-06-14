@@ -53,6 +53,7 @@ function emptyState(): PersistedState {
     exercises: [],
     currentPlan: null,
     parsedMarkers: [],
+    chatMessages: [],
   };
 }
 

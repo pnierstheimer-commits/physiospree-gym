@@ -292,6 +292,35 @@ export interface ParsedMarker {
 }
 
 // ---------------------------------------------------------------------------
+// Coach-Chat (persistenter Dialog mit dem Coach)
+// ---------------------------------------------------------------------------
+
+export type ChatRole = 'user' | 'coach';
+
+/** Status nur für Coach-Messages mit Marker-Vorschlag (Confirm-Pflicht). */
+export type ChatMessageStatus = 'sent' | 'pending_confirm' | 'confirmed' | 'rejected';
+
+/**
+ * Eine Chat-Nachricht im Coach-Dialog. Append-only (Regel 5): wird nie gelöscht,
+ * nur der `status` ändert sich (confirmed/rejected). `updatedAt` treibt den
+ * Last-Write-Wins-Merge beim Sync (z. B. wenn der Status nachträglich kippt).
+ */
+export interface ChatMessage {
+  id: UUID;
+  role: ChatRole;
+  content: string;
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
+  /**
+   * Vom Coach vorgeschlagene Plan-Marker (nur Coach-Messages). Werden NIE
+   * automatisch angewendet — erst nach Nutzer-Bestätigung (confirmMarker).
+   * Wiederverwendung von `ParsedMarker`, damit applyMarkers sie verarbeiten kann.
+   */
+  proposedMarkers?: ParsedMarker[];
+  status?: ChatMessageStatus;
+}
+
+// ---------------------------------------------------------------------------
 // Übungskatalog
 // ---------------------------------------------------------------------------
 
@@ -359,4 +388,6 @@ export interface PersistedState {
    * gespeichert, aber noch nicht auf den State angewendet (Phase 3).
    */
   parsedMarkers: ParsedMarker[];
+  /** Persistenter Coach-Chat-Verlauf (append-only). */
+  chatMessages: ChatMessage[];
 }
