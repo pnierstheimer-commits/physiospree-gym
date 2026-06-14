@@ -21,11 +21,11 @@ function Icon({ tab }: { tab: AppTab }) {
     'aria-hidden': true,
   };
   switch (tab) {
-    case 'today': // Sonne
+    case 'today': // Haus (Outline)
       return (
         <svg {...common}>
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" />
+          <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
+          <path d="M9 21V12h6v9" />
         </svg>
       );
     case 'plan': // Kalender
