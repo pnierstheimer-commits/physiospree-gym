@@ -10,6 +10,7 @@ import { TodayScreen } from './screens/TodayScreen'
 import { CoachScreen } from './screens/CoachScreen'
 import { JournalScreen } from './screens/JournalScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
+import { WaitingScreen } from './screens/WaitingScreen'
 import { BottomNav } from './components/BottomNav'
 import type { ReactNode } from 'react'
 
@@ -28,7 +29,8 @@ function Splash() {
 
 function App() {
   const auth = useAuth()
-  const { state, replaceState, resetState, currentPlan, activeWorkout, activeTab } = useApp()
+  const { state, replaceState, resetState, currentPlan, activeWorkout, activeTab, planLoading } =
+    useApp()
   const userId = auth.user?.id ?? null
 
   // Verhindert mehrfaches Sync pro Login (syncedFor = bereits gesyncte userId).
@@ -75,6 +77,9 @@ function App() {
 
   // Aktives Workout hat Vorrang und blendet die Bottom-Nav aus (Fokus beim Training).
   if (activeWorkout) return <WorkoutScreen />
+
+  // Plan-Generierung: Vollbild-WaitingScreen (ohne Nav), bis der Plan eintrifft.
+  if (planLoading) return <WaitingScreen />
 
   // Tab-gesteuerte Screens + immer sichtbare Bottom-Nav.
   let screen: ReactNode

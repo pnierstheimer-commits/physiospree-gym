@@ -81,22 +81,6 @@ function buildNotes(minutes: number, a: EquipAnswers): string {
 
 // ---------------------------------------------------------------------------
 
-function LoadingView() {
-  return (
-    <div className="ps-screen">
-      <div className="ps-shell">
-        <div className="ps-center">
-          <div className="ps-spinner" aria-hidden="true" />
-          <div className="ps-loading-text">Dein Trainingsplan wird erstellt …</div>
-          <p className="ps-loading-sub">
-            Der Coach baut Zyklus, Split und die ersten zwei Wochen. Das dauert ein paar Sekunden.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ErrorView({
   message,
   onRetry,
@@ -150,7 +134,7 @@ function OptionCard({ title, sub, selected, onClick }: OptionCardProps) {
 // ---------------------------------------------------------------------------
 
 export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
-  const { requestPlan, planLoading, planError, clearPlan } = useApp();
+  const { requestPlan, planError, clearPlan } = useApp();
 
   const [step, setStep] = useState(1);
   const [goal, setGoal] = useState<Goal | null>(null);
@@ -162,8 +146,8 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const [equip, setEquip] = useState<EquipAnswers>(EMPTY_EQUIP);
   const [submitted, setSubmitted] = useState<UserProfile | null>(null);
 
-  // Loading/Error haben Vorrang vor dem Wizard.
-  if (planLoading) return <LoadingView />;
+  // Plan-Generierung läuft als Vollbild-WaitingScreen über App.tsx (planLoading).
+  // Hier nur noch der Fehlerfall + der Wizard.
   if (planError) {
     return (
       <ErrorView

@@ -1714,6 +1714,94 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- WaitingScreen (Plan-Generierung) --- */
+.ps-wait {
+  align-items: center;
+  text-align: center;
+}
+.ps-wait-brand {
+  flex: 0 0 auto;
+}
+.ps-wait-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.ps-wait-pulse {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin-bottom: 36px;
+}
+.ps-wait-pulse span {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--primary) / 0.6);
+  animation: ps-wait-ring 2.2s ease-out infinite;
+}
+.ps-wait-pulse span:nth-child(2) {
+  animation-delay: 1.1s;
+}
+.ps-wait-pulse i {
+  position: absolute;
+  inset: 36px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  animation: ps-wait-dot 2.2s ease-in-out infinite;
+}
+@keyframes ps-wait-ring {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+@keyframes ps-wait-dot {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.ps-wait-title {
+  margin-bottom: 10px;
+}
+.ps-wait-sub {
+  max-width: 320px;
+  margin: 0 auto 28px;
+}
+.ps-wait-phase {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  min-height: 22px;
+}
+.ps-wait-eta {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.ps-wait-foot {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground) / 0.7);
+  max-width: 300px;
+  margin: 0 auto;
+  padding-top: 16px;
+}
+
 /* --- ProfileScreen --- */
 .ps-prof-section {
   padding: 18px 0;
