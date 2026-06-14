@@ -69,7 +69,11 @@ function App() {
 
   // Eingeloggt: aktives Workout hat Vorrang, sonst Plan, sonst Onboarding.
   if (activeWorkout) return <WorkoutScreen />
-  return currentPlan ? <PlanScreen onSignOut={handleSignOut} /> : <OnboardingScreen />
+  return currentPlan ? (
+    <PlanScreen onSignOut={handleSignOut} />
+  ) : (
+    <OnboardingScreen onSignOut={handleSignOut} />
+  )
 }
 
 export default App

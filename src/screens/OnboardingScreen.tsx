@@ -149,7 +149,7 @@ function OptionCard({ title, sub, selected, onClick }: OptionCardProps) {
 
 // ---------------------------------------------------------------------------
 
-export function OnboardingScreen() {
+export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
   const { requestPlan, planLoading, planError, clearPlan } = useApp();
 
   const [step, setStep] = useState(1);
@@ -203,6 +203,13 @@ export function OnboardingScreen() {
   return (
     <div className="ps-screen">
       <div className="ps-shell">
+        {onSignOut && (
+          <div className="ps-toprow">
+            <button type="button" className="ps-link-quiet" onClick={onSignOut}>
+              Abmelden
+            </button>
+          </div>
+        )}
         <div className="ps-head">
           {step > 1 && (
             <button type="button" className="ps-back" onClick={goBack} aria-label="Zurück">

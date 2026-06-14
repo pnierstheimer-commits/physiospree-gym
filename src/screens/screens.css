@@ -1142,3 +1142,23 @@
   font-size: 14px;
   color: hsl(var(--status-red));
 }
+
+/* Dezenter Top-Right-Button (z. B. Abmelden im Onboarding) */
+.ps-toprow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.ps-link-quiet {
+  appearance: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 6px 4px;
+}
+.ps-link-quiet:hover {
+  color: hsl(var(--foreground));
+}
