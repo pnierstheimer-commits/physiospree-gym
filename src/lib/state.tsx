@@ -154,8 +154,11 @@ interface AppContextValue {
    * Antwort an (mit ggf. Marker-Vorschlag, Status 'pending_confirm').
    */
   sendChatMessage: (content: string) => Promise<void>;
-  /** Bestätigt die Marker einer Coach-Nachricht -> anwenden + status 'confirmed'. */
-  confirmChatMarker: (messageId: string) => void;
+  /**
+   * Bestätigt die Marker einer Coach-Nachricht -> anwenden + status 'confirmed'.
+   * `scope` steuert EXERCISE_SWAP (nur diese Woche vs. dauerhaft).
+   */
+  confirmChatMarker: (messageId: string, scope?: 'this_week' | 'permanent') => void;
   /** Verwirft die Marker einer Coach-Nachricht -> status 'rejected' (nicht angewendet). */
   rejectChatMarker: (messageId: string) => void;
 }
@@ -512,10 +515,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const confirmChatMarker = useCallback<AppContextValue['confirmChatMarker']>(
-    (messageId) => {
+    (messageId, scope) => {
       const msg = state.chatMessages.find((m) => m.id === messageId);
       if (!msg?.proposedMarkers || msg.proposedMarkers.length === 0) return;
-      applyMarkers(msg.proposedMarkers); // wendet unterstützte Marker an + protokolliert
+      // Scope-Wahl (nur diese Woche / dauerhaft) als payload.scope an
+      // EXERCISE_SWAP-Marker durchreichen.
+      const markers = scope
+        ? msg.proposedMarkers.map((m) =>
+            m.kind === 'EXERCISE_SWAP' ? { ...m, payload: { ...m.payload, scope } } : m,
+          )
+        : msg.proposedMarkers;
+      applyMarkers(markers); // wendet unterstützte Marker an + protokolliert
       updateChatMessageStatus(messageId, 'confirmed');
     },
     [state.chatMessages, applyMarkers, updateChatMessageStatus],

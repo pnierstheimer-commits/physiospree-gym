@@ -13,15 +13,19 @@ import { describeMarker } from '../lib/services/chatService';
 import type { ChatMessage } from '../shared/types';
 import '../screens/screens.css';
 
+type SwapScope = 'this_week' | 'permanent';
+
 interface BubbleProps {
   msg: ChatMessage;
-  onConfirm: (id: string) => void;
+  onConfirm: (id: string, scope?: SwapScope) => void;
   onReject: (id: string) => void;
 }
 
 function Bubble({ msg, onConfirm, onReject }: BubbleProps) {
   const isCoach = msg.role === 'coach';
   const hasMarkers = !!msg.proposedMarkers && msg.proposedMarkers.length > 0;
+  // EXERCISE_SWAP braucht eine Scope-Wahl (nur diese Woche / dauerhaft).
+  const isSwap = !!msg.proposedMarkers?.some((m) => m.kind === 'EXERCISE_SWAP');
   return (
     <div className={`ps-chat-row ${isCoach ? 'is-coach' : 'is-user'}`}>
       <div className={`ps-chat-bubble ${isCoach ? 'is-coach' : 'is-user'}`}>
@@ -29,9 +33,28 @@ function Bubble({ msg, onConfirm, onReject }: BubbleProps) {
 
         {isCoach && hasMarkers && msg.status === 'pending_confirm' && (
           <div className="ps-chat-actions">
-            <button type="button" className="ps-chat-confirm" onClick={() => onConfirm(msg.id)}>
-              Übernehmen
-            </button>
+            {isSwap ? (
+              <>
+                <button
+                  type="button"
+                  className="ps-chat-confirm"
+                  onClick={() => onConfirm(msg.id, 'this_week')}
+                >
+                  Nur diese Woche
+                </button>
+                <button
+                  type="button"
+                  className="ps-chat-confirm"
+                  onClick={() => onConfirm(msg.id, 'permanent')}
+                >
+                  Dauerhaft
+                </button>
+              </>
+            ) : (
+              <button type="button" className="ps-chat-confirm" onClick={() => onConfirm(msg.id)}>
+                Übernehmen
+              </button>
+            )}
             <button type="button" className="ps-chat-reject" onClick={() => onReject(msg.id)}>
               Verwerfen
             </button>
@@ -64,7 +87,7 @@ export function CoachChat() {
   const endRef = useRef<HTMLDivElement>(null);
 
   // Plan-Anpassung während eines laufenden Workouts: nachfragen (WICHTIG).
-  const guardedConfirm = (id: string) => {
+  const guardedConfirm = (id: string, scope?: 'this_week' | 'permanent') => {
     if (
       activeWorkout &&
       !window.confirm(
@@ -74,7 +97,7 @@ export function CoachChat() {
     ) {
       return;
     }
-    confirmChatMarker(id);
+    confirmChatMarker(id, scope);
   };
 
   // Bei neuer Nachricht / Tippanzeige ans Ende scrollen.

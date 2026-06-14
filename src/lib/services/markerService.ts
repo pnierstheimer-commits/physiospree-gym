@@ -31,6 +31,19 @@ function exName(notes: string | undefined): string {
   return i === -1 ? notes : notes.slice(0, i);
 }
 
+/** [min,max]-Rep-Range aus unbekanntem Payload-Wert. */
+function asRepRange(v: unknown): [number, number] | null {
+  if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'number' && typeof v[1] === 'number') {
+    return [v[0], v[1]];
+  }
+  return null;
+}
+
+/** notes-Feld aus Name + optionalem Cue ("Name — cue"). */
+function buildNotes(name: string, cue: string): string {
+  return cue ? `${name} — ${cue}` : name;
+}
+
 function mapWeeks(
   weeks: PlanWeek[],
   pred: (w: PlanWeek) => boolean,
@@ -163,6 +176,55 @@ function sessionAdjustment(
 }
 
 // ---------------------------------------------------------------------------
+// EXERCISE_SWAP — Übung ersetzen (Schmerz / Gerät besetzt)
+// payload: { exerciseId?, exerciseName?, newExerciseId?, newName, newCue?,
+//            newRepRange?, scope?, reason }
+// scope: 'this_week' (nur aktuelle Woche, Default) | 'permanent' (ab jetzt)
+// Last bleibt gleich — der Coach fordert im Chat zur Kalibrierung auf.
+// ---------------------------------------------------------------------------
+
+function exerciseSwap(
+  weeks: PlanWeek[],
+  framework: PlanFramework,
+  marker: ParsedMarker,
+  now: string,
+): PlanWeek[] {
+  const oldId = asStr(marker.payload.exerciseId);
+  const oldName = asStr(marker.payload.exerciseName);
+  const newName = asStr(marker.payload.newName);
+  const newCue = asStr(marker.payload.newCue);
+  const newExerciseId = asStr(marker.payload.newExerciseId);
+  const newReps = asRepRange(marker.payload.newRepRange);
+  if (!newName && !newExerciseId) return weeks; // nichts zu tauschen
+
+  const permanent = asStr(marker.payload.scope) === 'permanent';
+  const cur = framework.currentWeekIndex;
+  const matches = (peId: string, notes: string | undefined): boolean =>
+    (!!oldId && peId === oldId) || (!!oldName && exName(notes) === oldName);
+
+  return mapWeeks(
+    weeks,
+    (w) => (permanent ? w.weekIndex >= cur : w.weekIndex === cur),
+    (w) => ({
+      ...w,
+      sessions: w.sessions.map((s) => ({
+        ...s,
+        exercises: s.exercises.map((pe) => {
+          if (!matches(pe.exerciseId, pe.notes)) return pe;
+          return {
+            ...pe,
+            exerciseId: newExerciseId || pe.exerciseId,
+            notes: newName ? buildNotes(newName, newCue) : pe.notes,
+            targetReps: newReps ?? pe.targetReps,
+            updatedAt: now,
+          };
+        }),
+      })),
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
 
@@ -184,6 +246,8 @@ export function applyMarkerToWeeks(
       return deload(weeks, framework, now);
     case 'SESSION_ADJUSTMENT':
       return sessionAdjustment(weeks, framework, marker, now);
+    case 'EXERCISE_SWAP':
+      return exerciseSwap(weeks, framework, marker, now);
     default:
       return weeks;
   }
