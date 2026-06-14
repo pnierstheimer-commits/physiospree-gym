@@ -73,7 +73,7 @@ function Bubble({ msg, onConfirm, onReject }: BubbleProps) {
   );
 }
 
-export function CoachChat() {
+export function CoachChat({ fullscreen = false }: { fullscreen?: boolean } = {}) {
   const {
     chatMessages,
     chatLoading,
@@ -113,7 +113,7 @@ export function CoachChat() {
   };
 
   return (
-    <div className="ps-chat">
+    <div className={`ps-chat${fullscreen ? ' ps-chat--full' : ''}`}>
       <div className="ps-chat-log">
         {chatMessages.length === 0 ? (
           <div className="ps-chat-empty">Schreib dem Coach. Tagesform, Frage, Feedback.</div>

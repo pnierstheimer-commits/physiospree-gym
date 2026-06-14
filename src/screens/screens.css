@@ -1338,11 +1338,33 @@
   padding: 8px 0 24px;
 }
 
+/* --- CoachScreen (Vollbild-Chat) --- */
+.ps-coach-shell {
+  display: flex;
+  flex-direction: column;
+}
+.ps-coach-head {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+}
+
 /* --- CoachChat --- */
 .ps-chat {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+/* Vollbild-Variante (CoachScreen): füllt die Höhe, Eingabe unten. */
+.ps-chat--full {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.ps-chat--full .ps-chat-log {
+  flex: 1 1 auto;
+  max-height: none;
 }
 .ps-chat-log {
   display: flex;
