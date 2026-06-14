@@ -41,7 +41,7 @@ export function LoginScreen({ sendOtp, verifyOtp }: LoginScreenProps) {
   };
 
   const onVerify = async () => {
-    if (code.length !== 6 || busy) return;
+    if (code.length !== 8 || busy) return;
     setBusy(true);
     setError(null);
     const { error: err } = await verifyOtp(email.trim(), code);
@@ -73,7 +73,7 @@ export function LoginScreen({ sendOtp, verifyOtp }: LoginScreenProps) {
             }}
           >
             <div className="ps-title">Anmelden</div>
-            <p className="ps-subtitle">Wir schicken dir einen 6-stelligen Code per E-Mail.</p>
+            <p className="ps-subtitle">Wir schicken dir einen 8-stelligen Code per E-Mail.</p>
             <input
               className="ps-login-input"
               type="email"
@@ -113,11 +113,11 @@ export function LoginScreen({ sendOtp, verifyOtp }: LoginScreenProps) {
               inputMode="numeric"
               autoComplete="one-time-code"
               autoFocus
-              maxLength={6}
-              placeholder="••••••"
+              maxLength={8}
+              placeholder="••••••••"
               value={code}
               onChange={(e) => {
-                setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                setCode(e.target.value.replace(/\D/g, '').slice(0, 8));
                 setError(null);
               }}
             />
@@ -125,7 +125,7 @@ export function LoginScreen({ sendOtp, verifyOtp }: LoginScreenProps) {
             <button
               type="submit"
               className="ps-btn ps-btn-primary"
-              disabled={code.length !== 6 || busy}
+              disabled={code.length !== 8 || busy}
             >
               {busy ? 'Prüfe …' : 'Anmelden'}
             </button>
