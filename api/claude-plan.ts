@@ -706,9 +706,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       // synchrone Antwortzeit deutlich unter dem Function-Timeout; das ist für
       // den "langsamen KI-Pfad" (Regel 8) hier der pragmatische Trade-off.
       thinking: { type: 'disabled' },
-      system: systemPrompt,
+      // Prompt Caching (Kostenoptimierung): Der System-Prompt ist statisch
+      // (SKILL + Segment-Referenz + exercises + sound + Zykluslänge) und über
+      // alle Plan-Calls identisch -> als cache-baren Block markieren. Der
+      // dynamische Teil (Profil/Logbuch/Anfrage) steht im user-message NACH
+      // dem Breakpoint und bleibt ungecacht. Min. cache-barer Prefix bei
+      // claude-sonnet-4-6 = 2048 Tokens; der System-Prompt liegt deutlich
+      // darüber. Pro Segment entsteht ein eigener Cache-Eintrag (5min TTL).
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }],
     });
+
+    // Cache-Wirkung in den Vercel-Logs sichtbar machen.
+    const usage = message.usage;
+    console.log(
+      `[claude-plan] cache_creation=${usage.cache_creation_input_tokens ?? 0} ` +
+        `cache_read=${usage.cache_read_input_tokens ?? 0} ` +
+        `input=${usage.input_tokens} output=${usage.output_tokens}`,
+    );
 
     raw = message.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
