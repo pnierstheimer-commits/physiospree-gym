@@ -1509,6 +1509,7 @@
 }
 .ps-chat-send {
   flex: 0 0 auto;
+  width: auto;
   padding: 11px 18px;
 }
 
