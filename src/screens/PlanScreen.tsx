@@ -2,13 +2,14 @@
  * PlanScreen — Plan-Anzeige mit Roadmap + Wochentags-Planung.
  *
  * Aufbau (von oben nach unten): Framework-Header (Ziel/Split/Woche X von Y) →
- * 12-Wochen-Roadmap (alle Wochen kompakt) → Tagesplanung der ausgewählten Woche
- * (Drag-and-Drop Mo–So) → Detail der angetippten Einheit. Nur eine Woche ist
- * gleichzeitig „offen" (selectedWeek), Default = aktuelle Woche.
+ * 12-Wochen-Roadmap → Tagesplanung der ausgewählten Woche (Drag-and-Drop Mo–So)
+ * → Detail der angetippten Einheit. Nur eine Woche ist „offen" (selectedWeek).
  *
- * UI-only (Regel 3): keine Trainingsentscheidungen. Auto-Verteilung der
- * Wochentage und Reorder laufen über State-Actions (scheduleService).
- * Übungsname steckt in `notes` ("Name — cue"), da `exerciseId` Platzhalter ist.
+ * Coach-Chat lebt jetzt im CoachScreen, Historie/Progression im JournalScreen
+ * (Nav-Umbau) — dieser Screen zeigt nur noch Plan + Tagesplanung.
+ *
+ * UI-only (Regel 3): keine Trainingsentscheidungen. Übungsname steckt in
+ * `notes` ("Name — cue"), da `exerciseId` Platzhalter ist.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -17,16 +18,7 @@ import { requestNextWindow, shouldGenerateNextWindow } from '../lib/services/win
 import { needsScheduling } from '../lib/services/scheduleService';
 import { WeekRoadmap } from '../components/WeekRoadmap';
 import { WeekDayPlanner } from '../components/WeekDayPlanner';
-import { CoachChat } from '../components/CoachChat';
-import type {
-  BlockPhase,
-  CoachAction,
-  Goal,
-  PlannedExercise,
-  PlannedSession,
-  Workout,
-  WorkoutExercise,
-} from '../shared/types';
+import type { BlockPhase, CoachAction, Goal, PlannedExercise, PlannedSession } from '../shared/types';
 import './screens.css';
 
 const GOAL_LABEL: Record<Goal, string> = {
@@ -74,69 +66,6 @@ function isCalibration(name: string): boolean {
   return /kalibr/i.test(name);
 }
 
-/** Deutsche kg-Schreibweise (42.5 -> "42,5"). */
-function fmtKg(n: number): string {
-  return String(n).replace('.', ',');
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
-}
-
-/** Durchschnitts-RPE aus den Arbeitssätzen (Auswertung wird nicht persistiert). */
-function avgRpe(w: Workout): number | null {
-  const rpes = w.exercises.flatMap((e) =>
-    e.sets.filter((s) => !s.isWarmup && typeof s.rpe === 'number').map((s) => s.rpe as number),
-  );
-  if (rpes.length === 0) return null;
-  return Math.round((rpes.reduce((a, b) => a + b, 0) / rpes.length) * 10) / 10;
-}
-
-/** Kompakte Ist-Werte einer geloggten Übung. */
-function loggedSetsLine(we: WorkoutExercise): string {
-  const sets = [...we.sets].sort((a, b) => a.setNumber - b.setNumber);
-  if (sets.length === 0) return 'keine Sätze';
-  const reps = sets.map((s) => s.reps).join('/');
-  const rpe = sets[0].rpe;
-  return `${fmtKg(sets[0].weightKg)} kg × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
-}
-
-interface Progression {
-  name: string;
-  weights: number[];
-  count: number;
-}
-
-/** Last-Verlauf je Übung über die abgeschlossenen Workouts (nur Veränderungen). */
-function computeProgressions(history: Workout[]): Progression[] {
-  const completed = history
-    .filter((w) => w.status === 'completed')
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  const byName = new Map<string, number[]>();
-  for (const w of completed) {
-    for (const we of w.exercises) {
-      const name = splitExercise(we.notes).name;
-      const working = we.sets.filter((s) => !s.isWarmup).map((s) => s.weightKg);
-      if (working.length === 0) continue;
-      const top = Math.max(...working);
-      const arr = byName.get(name) ?? [];
-      arr.push(top);
-      byName.set(name, arr);
-    }
-  }
-
-  const out: Progression[] = [];
-  for (const [name, all] of byName) {
-    const seq: number[] = [];
-    for (const v of all) if (seq.length === 0 || seq[seq.length - 1] !== v) seq.push(v);
-    if (seq.length >= 2 && seq[0] !== seq[seq.length - 1]) {
-      out.push({ name, weights: seq, count: all.length });
-    }
-  }
-  return out;
-}
-
 /** Detailansicht einer angetippten Einheit (Übungen + Training starten). */
 function SessionDetail({
   session,
@@ -176,29 +105,17 @@ function SessionDetail({
   );
 }
 
-export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
-  const {
-    currentPlan,
-    clearPlan,
-    startWorkout,
-    setPlan,
-    workoutHistory,
-    updateWeekSessions,
-    ensureSchedule,
-    chatMessages,
-  } = useApp();
+export function PlanScreen() {
+  const { currentPlan, clearPlan, startWorkout, setPlan, workoutHistory, updateWeekSessions, ensureSchedule } =
+    useApp();
 
   const initialWeek = currentPlan?.framework.currentWeekIndex ?? 0;
   const [selectedWeek, setSelectedWeek] = useState(initialWeek);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [openHistory, setOpenHistory] = useState(false);
-  const [openWorkoutId, setOpenWorkoutId] = useState<string | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
   const [windowState, setWindowState] = useState<'idle' | 'generating' | 'error'>('idle');
   const [windowError, setWindowError] = useState<string | null>(null);
 
-  // Auto-Verteilung fehlender Wochentage beim Laden (einmalig, deferred ->
-  // kein sync setState im Effect). Guard verhindert No-op-Writes.
+  // Auto-Verteilung fehlender Wochentage beim Laden (einmalig, deferred).
   useEffect(() => {
     if (currentPlan && needsScheduling(currentPlan.framework)) {
       const id = setTimeout(ensureSchedule, 0);
@@ -221,8 +138,7 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
       });
   }, [currentPlan, workoutHistory, setPlan]);
 
-  // Nach dem Laden prüfen, ob das nächste Fenster fällig ist (StrictMode-fest
-  // über windowState, runWindow deferred).
+  // Nach dem Laden prüfen, ob das nächste Fenster fällig ist.
   useEffect(() => {
     if (!currentPlan || windowState !== 'idle') return;
     if (!shouldGenerateNextWindow(currentPlan, workoutHistory)) return;
@@ -246,18 +162,8 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
   const currentWeekObj = weeks.find((w) => w.weekIndex === fw.currentWeekIndex);
   const selectedWeekObj =
     weeks.find((w) => w.weekIndex === selectedWeek) ?? currentWeekObj ?? weeks[0] ?? null;
-  const selectedSession =
-    selectedWeekObj?.sessions.find((s) => s.id === selectedSessionId) ?? null;
-
-  const progressions = computeProgressions(workoutHistory);
-  const recentWorkouts = [...workoutHistory]
-    .filter((w) => w.status === 'completed')
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 10);
+  const selectedSession = selectedWeekObj?.sessions.find((s) => s.id === selectedSessionId) ?? null;
   const firstWeekNo = (weeks[0]?.weekIndex ?? 0) + 1;
-  const pendingProposals = chatMessages.filter(
-    (m) => m.role === 'coach' && m.status === 'pending_confirm',
-  ).length;
 
   const onSelectWeek = (weekIndex: number) => {
     setSelectedWeek(weekIndex);
@@ -345,106 +251,11 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
           <div className="ps-empty">Keine Detailwochen vorhanden.</div>
         )}
 
-        {/* D) Coach-Chat (collapsible) */}
-        <div className={`ps-chat-section${chatOpen ? ' is-open' : ''}`}>
-          <button
-            type="button"
-            className={`ps-chat-header${pendingProposals > 0 && !chatOpen ? ' has-proposal' : ''}`}
-            onClick={() => setChatOpen((o) => !o)}
-            aria-expanded={chatOpen}
-          >
-            <span className="ps-chat-header-title">Coach-Chat</span>
-            {pendingProposals > 0 && !chatOpen && (
-              <span className="ps-chat-flag">
-                <span className="ps-chat-flag-dot" aria-hidden="true" />
-                {pendingProposals === 1
-                  ? 'Coach hat einen Vorschlag'
-                  : `Coach hat ${pendingProposals} Vorschläge`}
-              </span>
-            )}
-            <span className="ps-chevron">▾</span>
-          </button>
-          {chatOpen && <CoachChat />}
-        </div>
-
-        {progressions.length > 0 && (
-          <>
-            <div className="ps-prog-title">Progression</div>
-            <div className="ps-prog-list">
-              {progressions.map((p) => {
-                const up = p.weights[p.weights.length - 1] > p.weights[0];
-                return (
-                  <div key={p.name} className={`ps-prog${up ? ' is-up' : ''}`}>
-                    <span className="ps-prog-name">{p.name}:</span>{' '}
-                    <span className="ps-prog-seq">{p.weights.map(fmtKg).join(' → ')} kg</span>{' '}
-                    <span className="ps-prog-count">({p.count} Einheiten)</span>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* Letzte Workouts */}
-        {recentWorkouts.length > 0 && (
-          <div className={`ps-history${openHistory ? ' is-open' : ''}`}>
-            <button
-              type="button"
-              className="ps-history-head"
-              onClick={() => setOpenHistory((o) => !o)}
-              aria-expanded={openHistory}
-            >
-              <span>Letzte Workouts</span>
-              <span className="ps-chevron">▾</span>
-            </button>
-            {openHistory && (
-              <div className="ps-history-list">
-                {recentWorkouts.map((w) => {
-                  const rpe = avgRpe(w);
-                  const expanded = openWorkoutId === w.id;
-                  return (
-                    <div key={w.id} className="ps-hist-card">
-                      <button
-                        type="button"
-                        className="ps-hist-row"
-                        onClick={() => setOpenWorkoutId((id) => (id === w.id ? null : w.id))}
-                      >
-                        <span className="ps-hist-date">{formatDate(w.date)}</span>
-                        <span className="ps-hist-name">{w.name}</span>
-                        <span className="ps-hist-rpe">{rpe != null ? `Ø RPE ${rpe}` : '—'}</span>
-                      </button>
-                      {expanded && (
-                        <div className="ps-hist-details">
-                          {[...w.exercises]
-                            .sort((a, b) => a.order - b.order)
-                            .map((we) => (
-                              <div key={we.id} className="ps-hist-ex">
-                                <span className="ps-hist-ex-name">
-                                  {splitExercise(we.notes).name}
-                                </span>
-                                <span className="ps-hist-ex-sets">{loggedSetsLine(we)}</span>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Neuer Plan / Abmelden */}
+        {/* Neuer Plan */}
         <div className="ps-actions">
           <button type="button" className="ps-btn ps-btn-ghost ps-btn-quiet" onClick={onNewPlan}>
             Neuen Plan erstellen
           </button>
-          {onSignOut && (
-            <button type="button" className="ps-btn ps-btn-ghost ps-btn-quiet" onClick={onSignOut}>
-              Abmelden
-            </button>
-          )}
         </div>
       </div>
     </div>

@@ -79,11 +79,7 @@ function App() {
   let screen: ReactNode
   switch (activeTab) {
     case 'plan':
-      screen = currentPlan ? (
-        <PlanScreen onSignOut={handleSignOut} />
-      ) : (
-        <OnboardingScreen onSignOut={handleSignOut} />
-      )
+      screen = currentPlan ? <PlanScreen /> : <OnboardingScreen onSignOut={handleSignOut} />
       break
     case 'coach':
       screen = <CoachScreen />
