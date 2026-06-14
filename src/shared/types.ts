@@ -165,6 +165,8 @@ export interface Workout extends Syncable {
   status: SessionStatus;
   startedAt?: ISODateString;
   completedAt?: ISODateString;
+  /** Gesamtdauer der Einheit in Minuten (beim Abschluss gesetzt, Nav 5). */
+  totalDuration?: number;
   exercises: WorkoutExercise[];
   /** Check-in vor/nach dem Training. */
   checkin?: CheckinData | null;

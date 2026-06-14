@@ -1581,3 +1581,92 @@
   font-weight: 500;
   letter-spacing: 0.01em;
 }
+
+/* --- TodayScreen --- */
+.ps-today-date {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  text-transform: lowercase;
+  margin-bottom: 6px;
+}
+.ps-today-greet {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.ps-today-sub {
+  font-size: 16px;
+  color: hsl(var(--muted-foreground));
+  margin: 8px 0 28px;
+}
+.ps-today-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 22px 20px;
+  margin-bottom: 18px;
+}
+.ps-today-card-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 8px;
+}
+.ps-today-card-name {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.ps-today-card-meta {
+  font-size: 14px;
+  color: hsl(var(--muted-foreground));
+  margin: 4px 0 18px;
+}
+.ps-today-start {
+  width: 100%;
+}
+.ps-today-rest {
+  background: hsl(var(--secondary) / 0.6);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  font-size: 15px;
+  color: hsl(var(--foreground));
+  margin-bottom: 18px;
+}
+.ps-today-last {
+  appearance: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+}
+.ps-today-last-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.ps-today-last-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+}
+.ps-today-last-date {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+.ps-today-last-meta {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 4px;
+}
