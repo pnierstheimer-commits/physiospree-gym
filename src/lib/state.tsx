@@ -23,6 +23,8 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { SCHEMA_VERSION, STORAGE_KEY } from '../shared/constants';
 import type {
+  ChatMessage,
+  ChatMessageStatus,
   ParsedMarker,
   PersistedState,
   PlannedSession,
@@ -34,6 +36,7 @@ import type {
 } from '../shared/types';
 import { generatePlan, parseMarkers } from './services/planService';
 import { ensureScheduledDays } from './services/scheduleService';
+import { requestChatReply, toParsedMarkers } from './services/chatService';
 
 // ---------------------------------------------------------------------------
 // Initialer / leerer State
@@ -137,6 +140,23 @@ interface AppContextValue {
   // --- Marker-Anwendung (Feedback-Loop, Phase 3) ---
   /** Wendet Coach-Marker auf den aktuellen Plan an (LOAD_ADJUSTMENT, DELOAD). */
   applyMarkers: (markers: ParsedMarker[]) => void;
+
+  // --- Coach-Chat (Block 3) ---
+  /** Persistenter Chat-Verlauf (append-only). */
+  chatMessages: ChatMessage[];
+  /** Läuft gerade eine Chat-Anfrage? (transient) */
+  chatLoading: boolean;
+  /** Letzter Chat-Fehler oder null. (transient) */
+  chatError: string | null;
+  /**
+   * Sendet eine Nutzer-Nachricht: hängt sie an, ruft den Coach, hängt dessen
+   * Antwort an (mit ggf. Marker-Vorschlag, Status 'pending_confirm').
+   */
+  sendChatMessage: (content: string) => Promise<void>;
+  /** Bestätigt die Marker einer Coach-Nachricht -> anwenden + status 'confirmed'. */
+  confirmChatMarker: (messageId: string) => void;
+  /** Verwirft die Marker einer Coach-Nachricht -> status 'rejected' (nicht angewendet). */
+  rejectChatMarker: (messageId: string) => void;
 }
 
 /** Übungsname aus dem notes-Feld ("Name — cue"). */
@@ -159,6 +179,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Laden", und alte Fehler sollen nicht wieder auftauchen).
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   // Persistenz: bei jeder State-Änderung in localStorage schreiben.
   // Debounced über requestIdleCallback-Fallback, um Schreibstürme zu dämpfen.
@@ -440,6 +462,113 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
+  // --- Coach-Chat-Actions (Regel 1: funktionale Updater; append-only) ---
+
+  const addChatMessage = useCallback(
+    (msg: ChatMessage) => {
+      update((prev) => ({ chatMessages: [...prev.chatMessages, msg] }));
+    },
+    [update],
+  );
+
+  const updateChatMessageStatus = useCallback(
+    (id: string, status: ChatMessageStatus) => {
+      const now = new Date().toISOString();
+      update((prev) => ({
+        chatMessages: prev.chatMessages.map((m) =>
+          m.id === id ? { ...m, status, updatedAt: now } : m,
+        ),
+      }));
+    },
+    [update],
+  );
+
+  const sendChatMessage = useCallback<AppContextValue['sendChatMessage']>(
+    async (content) => {
+      const text = content.trim();
+      if (!text || chatLoading) return;
+      if (!state.currentPlan) {
+        setChatError('Kein Plan geladen — der Coach-Chat braucht einen aktiven Plan.');
+        return;
+      }
+      const now = new Date().toISOString();
+      const userMsg: ChatMessage = {
+        id: uuidv4(),
+        role: 'user',
+        content: text,
+        createdAt: now,
+        updatedAt: now,
+        status: 'sent',
+      };
+      addChatMessage(userMsg);
+      setChatLoading(true);
+      setChatError(null);
+      try {
+        const framework = state.currentPlan.framework;
+        const currentWeek =
+          framework.weeks.find((w) => w.weekIndex === framework.currentWeekIndex) ?? null;
+        const recentWorkouts = state.workouts
+          .filter((w) => w.status === 'completed')
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 5);
+
+        const reply = await requestChatReply({
+          messages: [...state.chatMessages, userMsg].slice(-10),
+          currentPlan: framework,
+          currentWeek,
+          recentWorkouts,
+          userProfile: state.profile,
+        });
+
+        const coachNow = new Date().toISOString();
+        const coachId = uuidv4();
+        const markers = toParsedMarkers(reply.proposedMarkers ?? [], coachId);
+        const coachMsg: ChatMessage =
+          markers.length > 0
+            ? {
+                id: coachId,
+                role: 'coach',
+                content: reply.content,
+                createdAt: coachNow,
+                updatedAt: coachNow,
+                proposedMarkers: markers,
+                status: 'pending_confirm',
+              }
+            : {
+                id: coachId,
+                role: 'coach',
+                content: reply.content,
+                createdAt: coachNow,
+                updatedAt: coachNow,
+                status: 'sent',
+              };
+        addChatMessage(coachMsg);
+      } catch (err) {
+        setChatError(err instanceof Error ? err.message : 'Unbekannter Fehler im Coach-Chat.');
+      } finally {
+        setChatLoading(false);
+      }
+    },
+    [state.currentPlan, state.workouts, state.chatMessages, state.profile, chatLoading, addChatMessage],
+  );
+
+  const confirmChatMarker = useCallback<AppContextValue['confirmChatMarker']>(
+    (messageId) => {
+      const msg = state.chatMessages.find((m) => m.id === messageId);
+      if (!msg?.proposedMarkers || msg.proposedMarkers.length === 0) return;
+      applyMarkers(msg.proposedMarkers); // wendet unterstützte Marker an + protokolliert
+      updateChatMessageStatus(messageId, 'confirmed');
+    },
+    [state.chatMessages, applyMarkers, updateChatMessageStatus],
+  );
+
+  const rejectChatMarker = useCallback<AppContextValue['rejectChatMarker']>(
+    (messageId) => {
+      updateChatMessageStatus(messageId, 'rejected'); // Marker NICHT angewendet
+    },
+    [updateChatMessageStatus],
+  );
+
   const activeWorkout = state.workouts.find((w) => w.status === 'in_progress') ?? null;
   const workoutHistory = state.workouts.filter(
     (w) => w.status === 'completed' || w.status === 'skipped',
@@ -466,6 +595,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       completeWorkout,
       abortWorkout,
       applyMarkers,
+      chatMessages: state.chatMessages,
+      chatLoading,
+      chatError,
+      sendChatMessage,
+      confirmChatMarker,
+      rejectChatMarker,
     }),
     [
       state,
@@ -486,6 +621,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       completeWorkout,
       abortWorkout,
       applyMarkers,
+      chatLoading,
+      chatError,
+      sendChatMessage,
+      confirmChatMarker,
+      rejectChatMarker,
     ],
   );
 
