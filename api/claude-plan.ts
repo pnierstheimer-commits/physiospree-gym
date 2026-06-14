@@ -39,7 +39,7 @@ import type {
   Workout,
 } from '../src/shared/types';
 
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 // Lokale Spiegelung von CYCLE_LENGTH_WEEKS aus src/shared/constants.ts (Single
 // Source, Regel 2). Die Vercel-Lambda kann zur Laufzeit nicht aus src/ auflösen
@@ -700,7 +700,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const client = new Anthropic();
     const message = await client.messages.create({
       model,
-      max_tokens: 16000,
+      max_tokens: 8000,
       // Thinking aus: Die Periodisierungslogik steckt bereits prägnant in den
       // Referenzdateien (SKILL/Segment/exercises). Ohne Thinking bleibt die
       // synchrone Antwortzeit deutlich unter dem Function-Timeout; das ist für
