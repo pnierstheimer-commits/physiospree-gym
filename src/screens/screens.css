@@ -1714,6 +1714,62 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- ProfileScreen --- */
+.ps-prof-section {
+  padding: 18px 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.ps-prof-section:first-of-type {
+  border-top: none;
+  padding-top: 8px;
+}
+.ps-prof-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 12px;
+}
+.ps-prof-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 7px 0;
+}
+.ps-prof-row-label {
+  font-size: 14px;
+  color: hsl(var(--muted-foreground));
+  flex: 0 0 auto;
+}
+.ps-prof-row-val {
+  font-size: 14px;
+  font-weight: 500;
+  text-align: right;
+  min-width: 0;
+  word-break: break-word;
+}
+.ps-prof-signout {
+  margin-top: 14px;
+}
+.ps-prof-danger .ps-prof-label {
+  color: hsl(var(--status-red));
+}
+.ps-prof-reset {
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border: 1px solid hsl(var(--status-red) / 0.4);
+  border-radius: var(--radius);
+  background: transparent;
+  color: hsl(var(--status-red));
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
 /* --- WorkoutScreen: Gesamtzeit-Uhr --- */
 .ps-wo-clock {
   display: flex;

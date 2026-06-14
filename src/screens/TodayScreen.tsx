@@ -34,7 +34,7 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 }
 
-export function TodayScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
+export function TodayScreen() {
   const { state, currentPlan, workoutHistory, startWorkout, setActiveTab } = useApp();
 
   const today = new Date();
@@ -77,14 +77,6 @@ export function TodayScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
   return (
     <div className="ps-screen">
       <div className="ps-shell">
-        {onSignOut && (
-          <div className="ps-toprow">
-            <button type="button" className="ps-link-quiet" onClick={onSignOut}>
-              Abmelden
-            </button>
-          </div>
-        )}
-
         <div className="ps-today-date">{dateStr}</div>
         <div className="ps-today-greet">{greeting}</div>
         <p className="ps-today-sub">{sub}</p>

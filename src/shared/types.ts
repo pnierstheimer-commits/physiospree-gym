@@ -365,7 +365,7 @@ export interface PlanResponse {
 // ---------------------------------------------------------------------------
 
 /** Aktiver Tab der Bottom-Navigation (UI-State, lokal persistiert). */
-export type AppTab = 'today' | 'plan' | 'coach' | 'journal';
+export type AppTab = 'today' | 'plan' | 'coach' | 'journal' | 'profile';
 
 /** Vollständiger App-State, wie er persistiert und synchronisiert wird. */
 export interface PersistedState {

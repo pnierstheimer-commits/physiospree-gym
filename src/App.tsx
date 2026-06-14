@@ -9,6 +9,7 @@ import { WorkoutScreen } from './screens/WorkoutScreen'
 import { TodayScreen } from './screens/TodayScreen'
 import { CoachScreen } from './screens/CoachScreen'
 import { JournalScreen } from './screens/JournalScreen'
+import { ProfileScreen } from './screens/ProfileScreen'
 import { BottomNav } from './components/BottomNav'
 import type { ReactNode } from 'react'
 
@@ -87,9 +88,12 @@ function App() {
     case 'journal':
       screen = <JournalScreen />
       break
+    case 'profile':
+      screen = <ProfileScreen email={auth.user?.email ?? null} onSignOut={handleSignOut} />
+      break
     case 'today':
     default:
-      screen = <TodayScreen onSignOut={handleSignOut} />
+      screen = <TodayScreen />
       break
   }
 

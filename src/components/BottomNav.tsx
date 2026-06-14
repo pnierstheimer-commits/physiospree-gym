@@ -50,6 +50,13 @@ function Icon({ tab }: { tab: AppTab }) {
           <circle cx="4.5" cy="18" r="1.1" fill="currentColor" stroke="none" />
         </svg>
       );
+    case 'profile': // Person-Silhouette
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
+        </svg>
+      );
   }
 }
 
@@ -58,6 +65,7 @@ const TABS: { tab: AppTab; label: string }[] = [
   { tab: 'plan', label: 'Plan' },
   { tab: 'coach', label: 'Coach' },
   { tab: 'journal', label: 'Tagebuch' },
+  { tab: 'profile', label: 'Profil' },
 ];
 
 export function BottomNav() {

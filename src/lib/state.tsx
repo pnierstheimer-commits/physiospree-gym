@@ -298,6 +298,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const plan = await generatePlan(profile);
         storePlan(plan);
+        // Profil app-weit verfügbar machen (Greeting, ProfileScreen) + Sync.
+        update(() => ({ profile }));
       } catch (err) {
         setPlanError(
           err instanceof Error ? err.message : 'Unbekannter Fehler bei der Planerstellung.',
@@ -306,7 +308,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setPlanLoading(false);
       }
     },
-    [storePlan],
+    [storePlan, update],
   );
 
   // --- Workout-Actions (Regel 1: funktionaler Updater) ---
