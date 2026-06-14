@@ -14,7 +14,7 @@
  * `targetReps`, Name/Cue = `notes` ("Name — cue").
  */
 
-import type { ParsedMarker, PlanFramework, PlanWeek } from '../../shared/types';
+import type { ParsedMarker, PlanFramework, PlannedSession, PlanWeek } from '../../shared/types';
 
 // ---------------------------------------------------------------------------
 // Kleine Helfer
@@ -286,6 +286,68 @@ function illnessRecovery(
 }
 
 // ---------------------------------------------------------------------------
+// VACATION_MODE — Urlaub: Sessions pausieren/minimieren + Auto-Rampback
+// payload: { startDate, endDate, mode: 'pause' | 'minimal' }
+// Ohne absolute Session-Daten wird die Urlaubsdauer aus start/endDate
+// berechnet und als weeksSpan ab currentWeekIndex abgebildet.
+//   pause:   Sessions im Zeitraum -> status 'skipped'
+//   minimal: Sessions im Zeitraum -> 2 Übungen, Sätze halbiert
+// Auto-Rampback nach dem Urlaub (Dauer): <7 Tage normal | 7–14 -10%/1 Wo |
+//   >14 -20%/2 Wo (= ILLNESS_RECOVERY-Rampe).
+// ---------------------------------------------------------------------------
+
+/** 'minimal': auf die 2 ersten Übungen (nach order) kürzen, Sätze halbieren. */
+function reduceMinimal(s: PlannedSession, now: string): PlannedSession {
+  const ordered = [...s.exercises].sort((a, b) => a.order - b.order);
+  const keep = new Set(ordered.slice(0, 2).map((e) => e.id));
+  return {
+    ...s,
+    updatedAt: now,
+    exercises: s.exercises
+      .filter((pe) => keep.has(pe.id))
+      .map((pe) => ({ ...pe, targetSets: Math.max(1, Math.round(pe.targetSets / 2)), updatedAt: now })),
+  };
+}
+
+function vacationMode(
+  weeks: PlanWeek[],
+  framework: PlanFramework,
+  marker: ParsedMarker,
+  now: string,
+): PlanWeek[] {
+  const start = Date.parse(asStr(marker.payload.startDate));
+  const end = Date.parse(asStr(marker.payload.endDate));
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return weeks; // ungültig
+
+  const days = Math.round((end - start) / 86_400_000);
+  const weeksSpan = Math.max(1, Math.ceil(days / 7));
+  const minimal = asStr(marker.payload.mode) === 'minimal';
+  const cur = framework.currentWeekIndex;
+  const spanEnd = cur + weeksSpan - 1;
+
+  // 1) Zeitraum pausieren bzw. minimieren.
+  let next = mapWeeks(
+    weeks,
+    (w) => w.weekIndex >= cur && w.weekIndex <= spanEnd,
+    (w) => ({
+      ...w,
+      updatedAt: now,
+      sessions: w.sessions.map((s) =>
+        minimal ? reduceMinimal(s, now) : { ...s, status: 'skipped' as const, updatedAt: now },
+      ),
+    }),
+  );
+
+  // 2) Auto-Rampback nach dem Urlaub, abhängig von der Pausenlänge.
+  if (days >= 7) {
+    const returnLoad = days > 14 ? 0.8 : 0.9;
+    const rampWeeks = days > 14 ? 2 : 1;
+    next = rampLoad(next, spanEnd + 1, returnLoad, rampWeeks, now);
+  }
+  return next;
+}
+
+// ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
 
@@ -311,6 +373,8 @@ export function applyMarkerToWeeks(
       return exerciseSwap(weeks, framework, marker, now);
     case 'ILLNESS_RECOVERY':
       return illnessRecovery(weeks, framework, marker, now);
+    case 'VACATION_MODE':
+      return vacationMode(weeks, framework, marker, now);
     default:
       return weeks;
   }
