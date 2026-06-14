@@ -189,7 +189,7 @@ function computeProgressions(history: Workout[]): Progression[] {
   return out;
 }
 
-export function PlanScreen() {
+export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
   const { currentPlan, clearPlan, startWorkout, setPlan, workoutHistory } = useApp();
   // Default: erste Woche offen; -1 = alle zu (Akkordeon).
   const [openWeek, setOpenWeek] = useState(0);
@@ -452,11 +452,16 @@ export function PlanScreen() {
           </div>
         )}
 
-        {/* Neuer Plan */}
+        {/* Neuer Plan / Abmelden */}
         <div className="ps-actions">
           <button type="button" className="ps-btn ps-btn-ghost ps-btn-quiet" onClick={onNewPlan}>
             Neuen Plan erstellen
           </button>
+          {onSignOut && (
+            <button type="button" className="ps-btn ps-btn-ghost ps-btn-quiet" onClick={onSignOut}>
+              Abmelden
+            </button>
+          )}
         </div>
       </div>
     </div>
