@@ -1,26 +1,28 @@
 /**
- * PlanScreen — echte Plan-Anzeige.
+ * PlanScreen — Plan-Anzeige mit Roadmap + Wochentags-Planung.
  *
- * Zwei Ebenen: (A) Framework-Übersicht mit abgeleiteter Block-Liste,
- * (B) Detail-Wochen als Akkordeon (eine Woche offen). UI-only (Regel 3):
- * keine Trainingsentscheidungen, nur Darstellung der bereits geplanten Daten.
+ * Aufbau (von oben nach unten): Framework-Header (Ziel/Split/Woche X von Y) →
+ * 12-Wochen-Roadmap (alle Wochen kompakt) → Tagesplanung der ausgewählten Woche
+ * (Drag-and-Drop Mo–So) → Detail der angetippten Einheit. Nur eine Woche ist
+ * gleichzeitig „offen" (selectedWeek), Default = aktuelle Woche.
  *
- * Datenlage: `PlanFramework` persistiert keine Block-Metadaten (das Coach-JSON
- * `blocks` wird im Generator verworfen). Die Block-Übersicht wird daher aus den
- * Wochen-Phasen abgeleitet (`PlanWeek.phase`/`intensityFactor`/`isDeload`).
- * Der Übungsname steckt in `notes` ("Name — cue"), da `exerciseId` ein
- * Platzhalter ist. "Level" ist nirgends persistiert und wird weggelassen.
+ * UI-only (Regel 3): keine Trainingsentscheidungen. Auto-Verteilung der
+ * Wochentage und Reorder laufen über State-Actions (scheduleService).
+ * Übungsname steckt in `notes` ("Name — cue"), da `exerciseId` Platzhalter ist.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../lib/state';
 import { requestNextWindow, shouldGenerateNextWindow } from '../lib/services/windowService';
+import { needsScheduling } from '../lib/services/scheduleService';
+import { WeekRoadmap } from '../components/WeekRoadmap';
+import { WeekDayPlanner } from '../components/WeekDayPlanner';
 import type {
   BlockPhase,
   CoachAction,
   Goal,
   PlannedExercise,
-  PlanWeek,
+  PlannedSession,
   Workout,
   WorkoutExercise,
 } from '../shared/types';
@@ -40,61 +42,6 @@ const PHASE_LABEL: Record<BlockPhase, string> = {
   peak: 'Realisierung',
   deload: 'Deload',
 };
-
-const PHASE_FOCUS: Record<BlockPhase, string> = {
-  accumulation: 'Volumen aufbauen',
-  intensification: 'Intensität steigern',
-  peak: 'Leistung realisieren',
-  deload: 'Erholung',
-};
-
-/** Volumen-Label, abgeleitet aus der (bereits vom Coach gesetzten) Phase. */
-const PHASE_VOLUME: Record<BlockPhase, string> = {
-  accumulation: 'hoch',
-  intensification: 'mittel',
-  peak: 'niedrig',
-  deload: 'reduziert',
-};
-
-interface DerivedBlock {
-  phase: BlockPhase;
-  startWeek: number;
-  endWeek: number;
-  intensityFactor: number;
-  isDeload: boolean;
-  containsCurrent: boolean;
-}
-
-/** Gruppiert die Detail-Wochen zu Blöcken (gleiche Phase = ein Block). */
-function deriveBlocks(weeks: PlanWeek[], currentWeekIndex: number): DerivedBlock[] {
-  const sorted = [...weeks].sort((a, b) => a.weekIndex - b.weekIndex);
-  const blocks: DerivedBlock[] = [];
-  for (const w of sorted) {
-    const last = blocks[blocks.length - 1];
-    if (last && last.phase === w.phase && last.isDeload === w.isDeload) {
-      last.endWeek = w.weekIndex;
-    } else {
-      blocks.push({
-        phase: w.phase,
-        startWeek: w.weekIndex,
-        endWeek: w.weekIndex,
-        intensityFactor: w.intensityFactor,
-        isDeload: w.isDeload,
-        containsCurrent: false,
-      });
-    }
-  }
-  for (const b of blocks) {
-    b.containsCurrent = currentWeekIndex >= b.startWeek && currentWeekIndex <= b.endWeek;
-  }
-  return blocks;
-}
-
-function weekRange(b: DerivedBlock): string {
-  const start = b.startWeek + 1;
-  const end = b.endWeek + 1;
-  return start === end ? `Woche ${start}` : `Woche ${start}–${end}`;
-}
 
 /** Split steckt in der plan_created-Action-Payload. */
 function extractSplit(actions: CoachAction[]): string | null {
@@ -189,14 +136,72 @@ function computeProgressions(history: Workout[]): Progression[] {
   return out;
 }
 
+/** Detailansicht einer angetippten Einheit (Übungen + Training starten). */
+function SessionDetail({
+  session,
+  onStart,
+}: {
+  session: PlannedSession;
+  onStart: (s: PlannedSession) => void;
+}) {
+  const calib = isCalibration(session.name);
+  const exercises = [...session.exercises].sort((a, b) => a.order - b.order);
+  return (
+    <div className={`ps-day ps-day-detail${calib ? ' is-calibration' : ''}`}>
+      <div className="ps-day-head">
+        <span className="ps-day-title">{session.name}</span>
+        {calib && <span className="ps-pill ps-pill-yellow">Kalibrierung</span>}
+      </div>
+      <div className="ps-exlist">
+        {exercises.map((ex) => {
+          const { name, cue } = splitExercise(ex.notes);
+          return (
+            <div key={ex.id} className="ps-ex">
+              <span className="ps-ex-name">{name}</span>
+              <span className="ps-ex-spec">{formatSpec(ex)}</span>
+              {cue && <span className="ps-ex-cue">{cue}</span>}
+            </div>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="ps-btn ps-btn-primary ps-start-btn"
+        onClick={() => onStart(session)}
+      >
+        Training starten
+      </button>
+    </div>
+  );
+}
+
 export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
-  const { currentPlan, clearPlan, startWorkout, setPlan, workoutHistory } = useApp();
-  // Default: erste Woche offen; -1 = alle zu (Akkordeon).
-  const [openWeek, setOpenWeek] = useState(0);
+  const {
+    currentPlan,
+    clearPlan,
+    startWorkout,
+    setPlan,
+    workoutHistory,
+    updateWeekSessions,
+    ensureSchedule,
+  } = useApp();
+
+  const initialWeek = currentPlan?.framework.currentWeekIndex ?? 0;
+  const [selectedWeek, setSelectedWeek] = useState(initialWeek);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [openHistory, setOpenHistory] = useState(false);
   const [openWorkoutId, setOpenWorkoutId] = useState<string | null>(null);
   const [windowState, setWindowState] = useState<'idle' | 'generating' | 'error'>('idle');
   const [windowError, setWindowError] = useState<string | null>(null);
+
+  // Auto-Verteilung fehlender Wochentage beim Laden (einmalig, deferred ->
+  // kein sync setState im Effect). Guard verhindert No-op-Writes.
+  useEffect(() => {
+    if (currentPlan && needsScheduling(currentPlan.framework)) {
+      const id = setTimeout(ensureSchedule, 0);
+      return () => clearTimeout(id);
+    }
+  }, [currentPlan, ensureSchedule]);
 
   const runWindow = useCallback(() => {
     if (!currentPlan) return;
@@ -213,9 +218,8 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
       });
   }, [currentPlan, workoutHistory, setPlan]);
 
-  // Nach dem Laden prüfen, ob das nächste Fenster fällig ist. Guard über
-  // windowState (StrictMode-fest), runWindow deferred (kein sync setState).
-  // Nach Erfolg hat der Plan das nächste Fenster -> shouldGenerate wird false.
+  // Nach dem Laden prüfen, ob das nächste Fenster fällig ist (StrictMode-fest
+  // über windowState, runWindow deferred).
   useEffect(() => {
     if (!currentPlan || windowState !== 'idle') return;
     if (!shouldGenerateNextWindow(currentPlan, workoutHistory)) return;
@@ -235,8 +239,12 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
 
   const fw = currentPlan.framework;
   const split = extractSplit(currentPlan.actions);
-  const blocks = deriveBlocks(fw.weeks, fw.currentWeekIndex);
   const weeks = [...fw.weeks].sort((a, b) => a.weekIndex - b.weekIndex);
+  const currentWeekObj = weeks.find((w) => w.weekIndex === fw.currentWeekIndex);
+  const selectedWeekObj =
+    weeks.find((w) => w.weekIndex === selectedWeek) ?? currentWeekObj ?? weeks[0] ?? null;
+  const selectedSession =
+    selectedWeekObj?.sessions.find((s) => s.id === selectedSessionId) ?? null;
 
   const progressions = computeProgressions(workoutHistory);
   const recentWorkouts = [...workoutHistory]
@@ -245,7 +253,12 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
     .slice(0, 10);
   const firstWeekNo = (weeks[0]?.weekIndex ?? 0) + 1;
 
-  const toggleWeek = (i: number) => setOpenWeek((prev) => (prev === i ? -1 : i));
+  const onSelectWeek = (weekIndex: number) => {
+    setSelectedWeek(weekIndex);
+    setSelectedSessionId(null);
+  };
+  const onSelectSession = (s: PlannedSession) =>
+    setSelectedSessionId((prev) => (prev === s.id ? null : s.id));
 
   const onNewPlan = () => {
     if (window.confirm('Plan verwerfen? Dein aktueller Plan geht verloren.')) {
@@ -256,20 +269,22 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
   return (
     <div className="ps-screen">
       <div className="ps-shell">
-        {/* A) Framework-Übersicht */}
+        {/* A) Framework-Header */}
         <div className="ps-plan-title">{fw.name}</div>
         <div className="ps-pills">
           <span className="ps-pill">{GOAL_LABEL[fw.goal]}</span>
           {split && <span className="ps-pill">{split}</span>}
           <span className="ps-pill ps-pill-muted">{fw.cycleLengthWeeks} Wochen</span>
         </div>
+        <div className="ps-plan-sub">
+          Woche {fw.currentWeekIndex + 1} von {fw.totalWeeks}
+          {currentWeekObj && ` · ${PHASE_LABEL[currentWeekObj.phase]}`}
+        </div>
 
         {windowState === 'generating' && (
           <div className="ps-window-banner">
             <div className="ps-spinner ps-spinner-sm" aria-hidden="true" />
-            <span>
-              Woche {firstWeekNo} abgeschlossen. Nächste 2 Wochen werden generiert …
-            </span>
+            <span>Woche {firstWeekNo} abgeschlossen. Nächste 2 Wochen werden generiert …</span>
           </div>
         )}
         {windowState === 'error' && (
@@ -284,35 +299,45 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
           </div>
         )}
 
-        <div className="ps-section-label">Blöcke</div>
-        <div className="ps-blocks">
-          {blocks.map((b, i) => (
-            <div
-              key={i}
-              className={
-                'ps-block' +
-                (b.containsCurrent ? ' is-current' : '') +
-                (b.isDeload ? ' is-deload' : '')
-              }
-            >
-              <div className="ps-block-head">
-                <span className="ps-block-name">{PHASE_LABEL[b.phase]}</span>
-                <span className="ps-block-range">{weekRange(b)}</span>
-              </div>
-              <div className="ps-block-focus">{PHASE_FOCUS[b.phase]}</div>
-              <div className="ps-block-meta">
-                <span className="ps-meta">
-                  Volumen <strong>{b.isDeload ? 'reduziert' : PHASE_VOLUME[b.phase]}</strong>
-                </span>
-                <span className="ps-meta">
-                  Intensität <strong>×{b.intensityFactor.toFixed(2)}</strong>
-                </span>
-                {b.isDeload && <span className="ps-pill ps-pill-yellow">Deload</span>}
-                {b.containsCurrent && <span className="ps-pill ps-pill-muted">Aktuell</span>}
-              </div>
+        {/* B) Zyklus-Roadmap */}
+        <div className="ps-section-label">Zyklus-Übersicht</div>
+        <WeekRoadmap
+          weeks={weeks}
+          currentWeek={fw.currentWeekIndex}
+          selectedWeek={selectedWeek}
+          onSelectWeek={onSelectWeek}
+        />
+
+        {/* C) Tagesplanung der ausgewählten Woche */}
+        {selectedWeekObj ? (
+          <>
+            <div className="ps-section-label">
+              Woche {selectedWeekObj.weekIndex + 1} — Tagesplanung
+              {selectedWeekObj.isDeload && (
+                <span className="ps-pill ps-pill-yellow ps-section-pill">Deload</span>
+              )}
             </div>
-          ))}
-        </div>
+            {selectedWeekObj.sessions.length === 0 ? (
+              <div className="ps-empty">Diese Woche ist noch nicht ausgeplant.</div>
+            ) : (
+              <>
+                <WeekDayPlanner
+                  week={selectedWeekObj}
+                  onReorder={(sessions) => updateWeekSessions(selectedWeekObj.id, sessions)}
+                  selectedSessionId={selectedSessionId}
+                  onSelectSession={onSelectSession}
+                />
+                {selectedSession ? (
+                  <SessionDetail session={selectedSession} onStart={startWorkout} />
+                ) : (
+                  <div className="ps-day-hint">Tippe eine Einheit für Details &amp; Start.</div>
+                )}
+              </>
+            )}
+          </>
+        ) : (
+          <div className="ps-empty">Keine Detailwochen vorhanden.</div>
+        )}
 
         {progressions.length > 0 && (
           <>
@@ -330,76 +355,6 @@ export function PlanScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
               })}
             </div>
           </>
-        )}
-
-        {/* B) Detail-Wochen */}
-        <div className="ps-section-label">Wochen im Detail</div>
-        {weeks.length === 0 ? (
-          <div className="ps-empty">Keine Detailwochen vorhanden.</div>
-        ) : (
-          <div className="ps-weeks">
-            {weeks.map((week, i) => {
-              const open = openWeek === i;
-              const sessions = [...week.sessions].sort((a, b) => a.dayIndex - b.dayIndex);
-              return (
-                <div key={week.id} className={`ps-week${open ? ' is-open' : ''}`}>
-                  <button
-                    type="button"
-                    className="ps-week-head"
-                    onClick={() => toggleWeek(i)}
-                    aria-expanded={open}
-                  >
-                    <span className="ps-week-title">Woche {week.weekIndex + 1}</span>
-                    <span className="ps-week-meta">
-                      {week.isDeload && <span className="ps-pill ps-pill-yellow">Deload</span>}
-                      <span>{sessions.length} Einheiten</span>
-                      <span className="ps-chevron">▾</span>
-                    </span>
-                  </button>
-                  <div className="ps-week-body">
-                    <div className="ps-week-inner">
-                      {sessions.map((session) => {
-                        const calib = isCalibration(session.name);
-                        const exercises = [...session.exercises].sort((a, b) => a.order - b.order);
-                        return (
-                          <div
-                            key={session.id}
-                            className={`ps-day${calib ? ' is-calibration' : ''}`}
-                          >
-                            <div className="ps-day-head">
-                              <span className="ps-day-title">
-                                Tag {session.dayIndex + 1} — {session.name}
-                              </span>
-                              {calib && <span className="ps-pill ps-pill-yellow">Kalibrierung</span>}
-                            </div>
-                            <div className="ps-exlist">
-                              {exercises.map((ex) => {
-                                const { name, cue } = splitExercise(ex.notes);
-                                return (
-                                  <div key={ex.id} className="ps-ex">
-                                    <span className="ps-ex-name">{name}</span>
-                                    <span className="ps-ex-spec">{formatSpec(ex)}</span>
-                                    {cue && <span className="ps-ex-cue">{cue}</span>}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <button
-                              type="button"
-                              className="ps-btn ps-btn-primary ps-start-btn"
-                              onClick={() => startWorkout(session)}
-                            >
-                              Training starten
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         )}
 
         {/* Letzte Workouts */}
