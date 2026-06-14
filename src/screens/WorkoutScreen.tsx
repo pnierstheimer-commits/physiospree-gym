@@ -71,6 +71,13 @@ function formatTime(s: number): string {
   return `${m}:${ss.toString().padStart(2, '0')}`;
 }
 
+/** Gesamtzeit-Uhr im Format mm:ss. */
+function formatClock(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 /** Kompakte Ist-Werte einer Übung: "40 kg × 15/15/14 @ RPE 9". */
 function formatSetsSummary(sets: WorkoutSet[]): string {
   if (sets.length === 0) return 'Keine Sätze erfasst';
@@ -102,6 +109,12 @@ export function WorkoutScreen() {
   const [timer, setTimer] = useState<{ secondsLeft: number; key: string } | null>(null);
   const [evaluation, setEvaluation] = useState<CoachEvaluation | null>(null);
   const [evalError, setEvalError] = useState<string | null>(null);
+  // Gesamtzeit-Uhr: tickt jede Sekunde, abgeleitet aus startedAt.
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Warnung bei Reload/Schließen während eines aktiven Workouts.
   useEffect(() => {
@@ -399,6 +412,8 @@ export function WorkoutScreen() {
         ` · RPE ${ev.targetRPE}`
       : `${ev.targetSets} Sätze`;
   const canAdvance = exerciseComplete(ev);
+  const startMs = Date.parse(activeWorkout.startedAt ?? activeWorkout.date);
+  const elapsedSeconds = Number.isNaN(startMs) ? 0 : Math.max(0, Math.floor((nowTs - startMs) / 1000));
 
   return (
     <div className="ps-screen">
@@ -410,6 +425,13 @@ export function WorkoutScreen() {
           <button type="button" className="ps-abort" onClick={onAbort}>
             Abbrechen
           </button>
+        </div>
+
+        <div className="ps-wo-clock">
+          <span className="ps-wo-session">{activeWorkout.name}</span>
+          <span className="ps-wo-time" aria-label="Gesamtzeit">
+            {formatClock(elapsedSeconds)}
+          </span>
         </div>
 
         {isCalibration && (

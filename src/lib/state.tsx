@@ -379,10 +379,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const idx = prev.workouts.findIndex((w) => w.status === 'in_progress');
       if (idx === -1) return {};
       const now = new Date().toISOString();
+      const active = prev.workouts[idx];
+      // Gesamtdauer in Minuten aus startedAt -> jetzt (Fallback: date).
+      const startMs = Date.parse(active.startedAt ?? active.date);
+      const totalDuration = Number.isNaN(startMs)
+        ? active.totalDuration
+        : Math.max(0, Math.round((Date.parse(now) - startMs) / 60000));
       const done: Workout = {
-        ...prev.workouts[idx],
+        ...active,
         status: 'completed',
         completedAt: now,
+        totalDuration,
         updatedAt: now,
       };
       return { workouts: prev.workouts.map((w, i) => (i === idx ? done : w)) };
