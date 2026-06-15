@@ -1,9 +1,11 @@
 /**
- * WeekRoadmap — kompakte Gesamtübersicht aller Wochen des Zyklus.
+ * WeekRoadmap — Zyklus-Übersicht, nach Blöcken (Phasen) gruppiert.
  *
- * UI-only (Regel 3): rendert eine Zeile pro Woche (Nr · Phase · Fokus · Status)
- * und meldet Klicks über onSelectWeek zurück. Keine Trainingsentscheidungen —
- * Status und Fokus sind reine Ableitungen aus den bereits geplanten Wochendaten.
+ * UI-only (Regel 3): gruppiert die Wochen in Blöcke (aufeinanderfolgende
+ * gleiche Phase) und zeigt pro Block einen Header mit Kerninfo (was sich
+ * ändert: Fokus/Volumen + RPE-Bereich), darunter die kompakten Wochen-Zeilen
+ * (Nr + Status-Dot). Deload-Wochen sind eigens markiert. Klick auf eine Woche
+ * meldet sie über onSelectWeek.
  */
 
 import type { BlockPhase, PlanWeek } from '../shared/types';
@@ -16,28 +18,13 @@ const PHASE_LABEL: Record<BlockPhase, string> = {
   deload: 'Deload',
 };
 
-const PHASE_VOLUME: Record<BlockPhase, string> = {
-  accumulation: 'hoch',
-  intensification: 'mittel',
-  peak: 'niedrig',
-  deload: 'reduziert',
+/** Kerninfo pro Phase (was sich im Block ändert). */
+const PHASE_DESC: Record<BlockPhase, string> = {
+  accumulation: 'Volumen hoch',
+  intensification: 'Last rauf',
+  peak: 'Maximaler Reiz',
+  deload: 'Erholung · Last −40 %',
 };
-
-/** Durchschnittliches Ziel-RPE der Woche (für den Fokus-Kurztext). */
-function avgTargetRpe(week: PlanWeek): number | null {
-  const rpes = week.sessions
-    .flatMap((s) => s.exercises.map((e) => e.targetRPE))
-    .filter((r): r is number => typeof r === 'number' && r > 0);
-  if (rpes.length === 0) return null;
-  return Math.round((rpes.reduce((a, b) => a + b, 0) / rpes.length) * 10) / 10;
-}
-
-function focusText(week: PlanWeek): string {
-  if (week.isDeload) return 'Erholung · Last reduziert';
-  const vol = `Volumen ${PHASE_VOLUME[week.phase]}`;
-  const rpe = avgTargetRpe(week);
-  return rpe != null ? `${vol} · RPE ${rpe}` : vol;
-}
 
 type WeekStatus = 'done' | 'current' | 'future';
 function statusOf(weekIndex: number, currentWeek: number): WeekStatus {
@@ -46,41 +33,92 @@ function statusOf(weekIndex: number, currentWeek: number): WeekStatus {
   return 'future';
 }
 
+/** RPE-Bereich eines Blocks (min–max der Ziel-RPE über alle Wochen/Übungen). */
+function blockRpe(weeks: PlanWeek[]): string {
+  const rpes = weeks
+    .flatMap((w) => w.sessions.flatMap((s) => s.exercises.map((e) => e.targetRPE)))
+    .filter((r): r is number => typeof r === 'number' && r > 0);
+  if (rpes.length === 0) return '';
+  const min = Math.min(...rpes);
+  const max = Math.max(...rpes);
+  return min === max ? `${min}` : `${min}–${max}`;
+}
+
+interface BlockGroup {
+  index: number;
+  phase: BlockPhase;
+  weeks: PlanWeek[];
+}
+
+/** Gruppiert Wochen in Blöcke (aufeinanderfolgende gleiche Phase + Deload-Flag). */
+function groupBlocks(weeks: PlanWeek[]): BlockGroup[] {
+  const sorted = [...weeks].sort((a, b) => a.weekIndex - b.weekIndex);
+  const raw: { phase: BlockPhase; isDeload: boolean; weeks: PlanWeek[] }[] = [];
+  for (const w of sorted) {
+    const last = raw[raw.length - 1];
+    if (last && last.phase === w.phase && last.isDeload === w.isDeload) {
+      last.weeks.push(w);
+    } else {
+      raw.push({ phase: w.phase, isDeload: w.isDeload, weeks: [w] });
+    }
+  }
+  return raw.map((b, i) => ({ index: i + 1, phase: b.phase, weeks: b.weeks }));
+}
+
 interface WeekRoadmapProps {
   weeks: PlanWeek[];
   /** Aktuell laufende Woche (framework.currentWeekIndex) — steuert die Status-Dots. */
   currentWeek: number;
-  /** Im Detail geöffnete Woche — wird in der Liste hervorgehoben. */
+  /** Im Detail geöffnete Woche — wird hervorgehoben. */
   selectedWeek: number;
   onSelectWeek: (weekIndex: number) => void;
 }
 
-export function WeekRoadmap({
-  weeks,
-  currentWeek,
-  selectedWeek,
-  onSelectWeek,
-}: WeekRoadmapProps) {
-  const sorted = [...weeks].sort((a, b) => a.weekIndex - b.weekIndex);
+export function WeekRoadmap({ weeks, currentWeek, selectedWeek, onSelectWeek }: WeekRoadmapProps) {
+  const blocks = groupBlocks(weeks);
+
   return (
     <div className="ps-roadmap">
-      {sorted.map((week) => {
-        const status = statusOf(week.weekIndex, currentWeek);
-        const selected = week.weekIndex === selectedWeek;
+      {blocks.map((block) => {
+        const rpe = blockRpe(block.weeks);
+        const detail =
+          block.phase === 'deload'
+            ? PHASE_DESC.deload
+            : `${PHASE_DESC[block.phase]}${rpe ? ` · RPE ${rpe}` : ''}`;
         return (
-          <button
-            type="button"
-            key={week.id}
-            className={`ps-rm-row is-${status}${selected ? ' is-selected' : ''}`}
-            onClick={() => onSelectWeek(week.weekIndex)}
-            aria-current={status === 'current' ? 'step' : undefined}
-            aria-expanded={selected}
-          >
-            <span className={`ps-rm-dot is-${status}`} aria-hidden="true" />
-            <span className="ps-rm-no">Wo {week.weekIndex + 1}</span>
-            <span className="ps-rm-phase">{PHASE_LABEL[week.phase]}</span>
-            <span className="ps-rm-focus">{focusText(week)}</span>
-          </button>
+          <div key={block.index} className={`ps-rm-block${block.phase === 'deload' ? ' is-deload' : ''}`}>
+            <div className="ps-rm-block-head">
+              <span className="ps-rm-block-name">
+                Block {block.index}: {PHASE_LABEL[block.phase]}
+              </span>
+              <span className="ps-rm-block-detail">{detail}</span>
+            </div>
+
+            <div className="ps-rm-weeks">
+              {block.weeks.map((week) => {
+                const status = statusOf(week.weekIndex, currentWeek);
+                const selected = week.weekIndex === selectedWeek;
+                return (
+                  <button
+                    type="button"
+                    key={week.id}
+                    className={`ps-rm-row is-${status}${selected ? ' is-selected' : ''}`}
+                    onClick={() => onSelectWeek(week.weekIndex)}
+                    aria-current={status === 'current' ? 'step' : undefined}
+                    aria-expanded={selected}
+                  >
+                    <span
+                      className={`ps-rm-dot is-${status}${week.isDeload ? ' is-deload' : ''}`}
+                      aria-hidden="true"
+                    />
+                    <span className="ps-rm-no">Woche {week.weekIndex + 1}</span>
+                    {status === 'current' && <span className="ps-rm-tag is-current">aktuell</span>}
+                    {week.isDeload && <span className="ps-rm-tag is-deload">Deload</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         );
       })}
     </div>
