@@ -258,3 +258,49 @@ Beispiel GK Beginner (Maschine + Kabel):
 - **GK-C:** Beinpresse / Brustpresse / Rudermaschine / Beinbeuger sitzend / Face Pulls / Trizeps Kabel / Pallof Press
 
 So trainiert der Beginner alle Bewegungsmuster, aber mit Variation über die Woche.
+
+---
+
+## Antagonistische Paarungen (für Supersätze)
+
+Supersätze verwenden immer antagonistische Partner — gegensätzliche Bewegungsmuster,
+die sich nicht gegenseitig ermüden. Die Paarung basiert auf Familien, nicht auf
+einzelnen Übungen. Jede Übung innerhalb einer Familie kann mit jeder Übung der
+Partner-Familie kombiniert werden (gleiche Stufe beachten).
+
+### Oberkörper-Paarungen
+
+| Partner A (Familie) | Partner B (Familie) | Beispiel Stufe 1 | Beispiel Stufe 2 | Beispiel Stufe 3 |
+|---------------------|---------------------|-------------------|-------------------|-------------------|
+| Horizontales Drücken (Brust) | Horizontales Ziehen (Rudern) | Brustpresse ↔ Rudermaschine | KH-Bankdrücken ↔ KH-Rudern einarmig | LH-Bankdrücken ↔ LH-Rudern |
+| Vertikales Drücken (Schulter) | Vertikales Ziehen (Latzug) | Schulterpress-Maschine ↔ Latzug breit | KH-Schulterdrücken ↔ Latzug V-Griff | LH-Überkopfdrücken ↔ Klimmzug |
+| Trizeps-Isolation | Bizeps-Isolation | Trizepsdrücken Kabel ↔ Bizeps-Curl Kabel | KH-Trizeps über Kopf ↔ KH-Hammercurl | Dips ↔ LH-Bizeps-Curl |
+
+### Unterkörper-Paarungen
+
+| Partner A (Familie) | Partner B (Familie) | Beispiel Stufe 1 | Beispiel Stufe 2 | Beispiel Stufe 3 |
+|---------------------|---------------------|-------------------|-------------------|-------------------|
+| Kniebeuge (Quadrizeps-dominant) | Hüftstreckung (Posterior Chain) | Beinpresse ↔ Beinbeuger liegend | Goblet Squat ↔ Rumänisches KH ↔ KH-RDL | LH-Kniebeuge ↔ LH-RDL |
+| Beinstrecker (Quad-Iso) | Beinbeuger (Hamstring-Iso) | Beinstrecker Maschine ↔ Beinbeuger Maschine | — | — |
+
+### Ganzkörper-Paarungen (für GK-Einheiten)
+
+| Partner A (Familie) | Partner B (Familie) | Logik |
+|---------------------|---------------------|-------|
+| Kniebeuge-Muster (UK) | Horizontales Drücken (OK) | UK/OK-Wechsel, maximale Erholung beider Regionen |
+| Hüftstreckung (UK) | Horizontales Ziehen (OK) | UK/OK-Wechsel |
+
+**GK-Supersätze nur bei Isolation/Assistenz.** Schwere Mehrgelenk-Übungen
+(Beinpresse, Brustpresse, Rudern) werden im GK-Split NICHT als Supersatz
+kombiniert — die systemische Belastung ist zu hoch. Supersätze im GK nur
+für die letzten 2–3 Übungen (Isolation: Bizeps/Trizeps, Seitheben, Waden).
+
+### Regeln für Paarungen
+
+1. **Gleiche Stufe.** Stufe-1-Übung wird mit Stufe-1-Partner gepaart. Kein Mischen.
+2. **Gleicher Standort.** Beide Übungen müssen am selben Gerät oder in direkter Nähe
+   machbar sein (Supersatz funktioniert nicht, wenn 30 m zwischen den Geräten liegen).
+3. **Hauptübungen nie im Supersatz** (bei Maximalkraft: nie; bei Hypertrophie:
+   antagonistisch erlaubt, agonistisch nur Intermediate/Advanced Block 1).
+4. **Reihenfolge innerhalb des Paars:** Die schwerere / ZNS-intensivere Übung zuerst.
+   Bankdrücken vor Rudern, Kniebeuge vor Beinbeuger.

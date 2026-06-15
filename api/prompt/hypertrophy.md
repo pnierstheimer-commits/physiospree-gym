@@ -29,6 +29,66 @@ Die Rep-Range ist die **Leitplanke für die Gewichtswahl:**
 dann ans Versagen. Ab Wo 5 steigt das RPE-Ziel schrittweise (Wo 5–8 RPE 8,
 Wo 9–11 RPE 9). Nie RPE 10 für Beginner.
 
+## Satzformate
+
+### Klassische Sätze (Default)
+Standard für alle Blöcke, alle Level. Jede Übung wird einzeln abgearbeitet:
+alle Arbeitssätze einer Übung fertig, Pause, dann nächste Übung.
+
+### Antagonistische Supersätze (erlaubt)
+Zwei Übungen mit gegensätzlichem Bewegungsmuster im Wechsel. Keine Pause
+zwischen den Übungen, Pause nach dem Paar.
+
+**Wann erlaubt:**
+- Alle Blöcke, alle Level
+- Besonders sinnvoll bei knapper Trainingszeit (45 min)
+- Kein Qualitätsverlust, weil der Zielmuskel der ersten Übung ruht,
+  während der Antagonist arbeitet
+
+**Pausenlogik:**
+- Keine Pause zwischen A1 und A2
+- Nach dem Paar (A2 fertig): 60–90 s Pause, dann A1 wieder
+- Effektive Pause pro Muskelgruppe ≈ 2–3 min (Satzzeit A2 + Paar-Pause)
+
+**Format im Plan:**
+```
+A1: Brustpresse — 3 × 8–15 @ 40 kg | RPE 9
+A2: Rudermaschine — 3 × 8–15 @ 35 kg | RPE 9
+→ Pause 90 s nach jedem Paar
+
+B1: Latzug breit — 3 × 8–15 @ 30 kg | RPE 9
+B2: Schulterpress-Maschine — 3 × 8–15 @ 25 kg | RPE 9
+→ Pause 90 s nach jedem Paar
+```
+
+**Paarungen:** → siehe `references/exercises.md`, Abschnitt "Antagonistische Paarungen"
+
+### Agonist-Supersätze (optional, fortgeschritten)
+Zwei Übungen für denselben Muskel direkt hintereinander.
+Maximiert metabolischen Stress — sinnvoll in Block 1 (Akkumulation).
+
+**Wann erlaubt:**
+- Nur Intermediate/Advanced
+- Nur Block 1 (Akkumulation, hohes Volumen, moderatere RPE)
+- Nicht in Block 2–3 (zu hohe Intensität, Formbruch-Risiko)
+
+**Beispiel:**
+```
+A1: KH-Bankdrücken — 3 × 8–15 @ 22,5 kg | RPE 9
+A2: Kabelzug-Flys — 3 × 10–15 @ 15 kg | RPE 9
+→ Pause 90 s nach jedem Paar
+```
+
+Die zweite Übung ist immer eine Isolation (leichter, geringeres Verletzungsrisiko
+bei Vorermüdung).
+
+### Zirkel — NICHT ERLAUBT bei Hypertrophie
+Zirkeltraining ist bei Hypertrophie ausgeschlossen. Begründung:
+- Systemische Ermüdung zu hoch → RPE 9–10 ist nicht steuerbar
+- Pause pro Muskelgruppe zu kurz → mechanische Spannung sinkt
+- Hypertrophie braucht gezielte Muskelerschöpfung, kein Herz-Kreislauf-Stress
+- Wer Zirkel will → Kraftausdauer-Segment
+
 ## Blockstruktur (12 Wochen, Intermediate/Advanced)
 
 ### Block 1 — Akkumulation (Wo 1–4)

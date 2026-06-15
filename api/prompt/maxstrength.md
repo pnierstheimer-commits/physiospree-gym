@@ -18,6 +18,46 @@ Beginner werden auf Hypertrophie umgeleitet — Technik und Muskelbasis zuerst.
 | Frequenz | 2–3×/Übung/Woche (bei 3–4 Trainingstagen) | Hauptübungen hoch-frequent |
 | Tempo | Konzentrisch: maximale Intent (so schnell wie möglich) | Nicht bremsen |
 
+## Satzformate
+
+### Klassische Sätze (Default, Pflicht bei Hauptübungen)
+Standard für alle Hauptübungen (Kniebeuge, Bankdrücken, Kreuzheben, Überkopfdrücken).
+Vollständige neuronale Erholung zwischen den Sätzen ist nicht verhandelbar.
+3–5 min Pause bei Hauptübungen. Kein anderes Format.
+
+### Antagonistische Supersätze (nur Assistenz/Isolation)
+Erlaubt bei Assistenz- und Isolationsübungen nach den Hauptübungen.
+Spart Zeit, ohne die Hauptübungs-Performance zu gefährden.
+
+**Wann erlaubt:**
+- Nur bei Assistenz-/Isolationsübungen (Bizeps, Trizeps, Seitheben, Rear Delt)
+- Nie bei Hauptübungen (Kniebeuge, Bankdrücken, Kreuzheben, Überkopfdrücken)
+- Alle Blöcke, sofern RPE der Assistenz ≤8
+
+**Pausenlogik:**
+- Keine Pause zwischen A1 und A2
+- Nach dem Paar: 90–120 s Pause
+- Nicht unter 90 s — bei Maximalkraft ist Erholung Priorität, auch bei Assistenz
+
+**Format im Plan:**
+```
+[Hauptübungen klassisch, volle Pause]
+1. Kniebeuge — 5 × 3 @ 100 kg | Pause 4 min | RPE 8
+2. Rumänisches Kreuzheben — 3 × 6 @ 80 kg | Pause 3 min | RPE 8
+
+[Assistenz als Supersatz]
+A1: Bizeps-Curl Kabel — 3 × 8 @ 25 kg | RPE 8
+A2: Trizepsdrücken Kabel — 3 × 8 @ 30 kg | RPE 8
+→ Pause 90 s nach jedem Paar
+```
+
+### Agonist-Supersätze — NICHT ERLAUBT bei Maximalkraft
+Vorermüdung des Zielmuskels widerspricht dem Prinzip maximaler Kraftentfaltung.
+
+### Zirkel — NICHT ERLAUBT bei Maximalkraft
+Widerspricht vollständig dem Prinzip neuronaler Erholung und maximaler Kraftentfaltung.
+Wer Zirkel will → Kraftausdauer-Segment.
+
 ## Blockstruktur (12 Wochen)
 
 ### Block 1 — Volumenakkumulation (Wo 1–4)
