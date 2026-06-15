@@ -1,10 +1,10 @@
 /**
- * OnboardingScreen — 5-Schritte-Flow zur Profilerfassung.
+ * OnboardingScreen — 6-Schritte-Flow zur Profilerfassung.
  *
+ * Schritt 1 ist "Kurz zu dir" (Name, Alter, optionales Warum) — ein Formular
+ * mit Weiter-Button; die übrigen Slides sind Auswahl-Karten (auto-advance).
  * UI-only (Regel 3): sammelt Eingaben, baut am Ende ein UserProfile und stößt
- * `requestPlan` an. Die Plan-Generierung, Persistenz und Fehlerbehandlung
- * liegen im State/Service. Loading- und Error-Zustand werden hier nur
- * angezeigt (planLoading/planError aus dem State).
+ * `requestPlan` an. Loading läuft als Vollbild-WaitingScreen über App.tsx.
  */
 
 import { useState } from 'react';
@@ -13,16 +13,16 @@ import { useApp } from '../lib/state';
 import type { Equipment, ExperienceLevel, Goal, UserProfile } from '../shared/types';
 import './screens.css';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
-// --- Schritt 1: Ziel ---
+// --- Schritt 2: Ziel ---
 const GOALS: { value: Goal; title: string; sub: string }[] = [
   { value: 'hypertrophy', title: 'Hypertrophie', sub: 'Muskelaufbau, Volumen im Fokus' },
   { value: 'strength', title: 'Maximalkraft', sub: 'Schwer, niedrige Wiederholungen' },
   { value: 'endurance', title: 'Kraftausdauer', sub: 'Hohe Wiederholungen, Dichte' },
 ];
 
-// --- Schritt 2: Trainingsalter -> ExperienceLevel ---
+// --- Schritt 3: Trainingsalter -> ExperienceLevel ---
 const EXPERIENCE: { title: string; sub: string; value: ExperienceLevel }[] = [
   { title: 'Noch nie trainiert', sub: 'Einstieg', value: 'beginner' },
   { title: 'Unter 6 Monaten', sub: 'Anfänger', value: 'beginner' },
@@ -30,21 +30,21 @@ const EXPERIENCE: { title: string; sub: string; value: ExperienceLevel }[] = [
   { title: 'Über 2 Jahre', sub: 'Erfahren', value: 'advanced' },
 ];
 
-// --- Schritt 3: Trainingstage ---
+// --- Schritt 4: Trainingstage ---
 const DAYS: { value: number; title: string; sub: string }[] = [
   { value: 2, title: '2 Tage', sub: '2× Ganzkörper' },
   { value: 3, title: '3 Tage', sub: 'Ganzkörper oder OK/UK/GK' },
   { value: 4, title: '4 Tage', sub: '2× Ober-/Unterkörper' },
 ];
 
-// --- Schritt 4: Trainingszeit ---
+// --- Schritt 5: Trainingszeit ---
 const MINUTES: { value: number; title: string; sub: string }[] = [
   { value: 45, title: '45 Minuten', sub: '5–6 Übungen' },
   { value: 60, title: '60 Minuten', sub: '6–7 Übungen' },
   { value: 75, title: '75+ Minuten', sub: '7–8 Übungen' },
 ];
 
-// --- Schritt 5: Equipment ---
+// --- Schritt 6: Equipment ---
 type EquipKey = 'barbellRack' | 'dumbbells' | 'cable' | 'machinesOnly';
 type EquipAnswers = Record<EquipKey, boolean | null>;
 
@@ -137,6 +137,11 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const { requestPlan, planError, clearPlan } = useApp();
 
   const [step, setStep] = useState(1);
+  // Schritt 1: Kurz zu dir
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [why, setWhy] = useState('');
+  // weitere Schritte
   const [goal, setGoal] = useState<Goal | null>(null);
   const [experience, setExperience] = useState<ExperienceLevel | null>(null);
   // Eigener Index, weil zwei Trainingsalter-Optionen auf 'beginner' mappen.
@@ -161,16 +166,23 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const goNext = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   const goBack = () => setStep((s) => Math.max(1, s - 1));
 
+  const ageNum = age.trim() === '' ? null : Number(age);
+  const ageTooYoung = ageNum != null && ageNum < 15;
+  const step1Valid =
+    name.trim().length >= 2 && ageNum != null && ageNum >= 15 && ageNum <= 99;
+
   const equipAllAnswered = EQUIP_QUESTIONS.every(({ key }) => equip[key] !== null);
 
   const finish = () => {
-    if (goal == null || experience == null || days == null || minutes == null) return;
+    if (goal == null || experience == null || days == null || minutes == null || ageNum == null) return;
     const now = new Date().toISOString();
     const profile: UserProfile = {
       id: uuidv4(),
       updatedAt: now,
       userId: uuidv4(),
-      displayName: '',
+      displayName: name.trim(),
+      age: ageNum,
+      goalWhy: why.trim() ? why.trim() : undefined,
       sex: 'unspecified',
       goal,
       experience,
@@ -217,6 +229,72 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
 
         {step === 1 && (
           <>
+            <div className="ps-title">Kurz zu dir</div>
+            <p className="ps-subtitle">Damit dein Coach dich kennt.</p>
+            <div className="ps-onb-form">
+              <label className="ps-onb-field">
+                <span className="ps-onb-label">Wie heißt du?</span>
+                <input
+                  className="ps-onb-input"
+                  type="text"
+                  autoFocus
+                  autoComplete="given-name"
+                  maxLength={30}
+                  placeholder="Dein Vorname"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+
+              <label className="ps-onb-field">
+                <span className="ps-onb-label">Wie alt bist du?</span>
+                <input
+                  className="ps-onb-input"
+                  type="number"
+                  inputMode="numeric"
+                  min={15}
+                  max={99}
+                  placeholder="z. B. 28"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                />
+                {ageTooYoung && (
+                  <span className="ps-onb-error">
+                    Physiospree Gym ist ab 15 Jahren verfügbar.
+                  </span>
+                )}
+              </label>
+
+              <label className="ps-onb-field">
+                <span className="ps-onb-label">Warum trainierst du?</span>
+                <textarea
+                  className="ps-onb-textarea"
+                  rows={3}
+                  maxLength={200}
+                  placeholder="z. B. Kraft aufbauen, nach Verletzung zurück, besser aussehen…"
+                  value={why}
+                  onChange={(e) => setWhy(e.target.value)}
+                />
+                <span className="ps-onb-hint">
+                  Optional — aber hilft dem Coach, dich zu verstehen
+                </span>
+              </label>
+            </div>
+            <div className="ps-actions">
+              <button
+                type="button"
+                className="ps-btn ps-btn-primary"
+                disabled={!step1Valid}
+                onClick={goNext}
+              >
+                Weiter
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
             <div className="ps-title">Dein Trainingsziel</div>
             <p className="ps-subtitle">Worauf zielt dieser Zyklus?</p>
             <div className="ps-cards">
@@ -236,7 +314,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <>
             <div className="ps-title">Wie lange trainierst du schon?</div>
             <p className="ps-subtitle">Bestimmt dein Progressionsmodell.</p>
@@ -258,7 +336,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <>
             <div className="ps-title">Trainingstage pro Woche</div>
             <p className="ps-subtitle">Steuert den Split.</p>
@@ -279,7 +357,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <>
             <div className="ps-title">Zeit pro Einheit</div>
             <p className="ps-subtitle">Bestimmt die Übungsanzahl.</p>
@@ -300,7 +378,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <>
             <div className="ps-title">Equipment</div>
             <p className="ps-subtitle">Vier kurze Fragen zu deinem Studio.</p>

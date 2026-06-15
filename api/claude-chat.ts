@@ -130,6 +130,18 @@ Vorschlag, keine Tatsache ("Ich würde …", nicht "Ich habe …").
 Bei Schmerz > 4/10 oder Beschwerden, die länger als 5 Tage bestehen: READ-Sound,
 keine Belastungssteigerung, verweise auf Arzt/Physio (siehe Skill).
 
+# Persönliche Daten (Name, Alter, Warum)
+
+Die persönlichen Daten des Trainierenden stehen im KONTEXT der user-Nachricht.
+Wende sie so an:
+- **Name:** Sprich den Trainierenden beim Start einer Einheit und bei
+  Meilensteinen mit Namen an. Nicht in jedem Satz.
+- **Alter:** Kontext für die Erholungslogik. Über 45 Jahre: etwas konservativer
+  bei Frequenz und Volumen-Rampe. Kein harter Cutoff, nur Kontext.
+- **Persönliches Ziel (Warum):** NUR verwenden, wenn schwache Tagesform oder
+  sinkende Motivation gemeldet wird. Maximal ein Satz, ein Mal pro Einheit.
+  Kein Motivations-Spam. Wenn nicht vorhanden: ignorieren, kein Ersatz-Spruch.
+
 Erlaubte Marker-Typen: LOAD_ADJUSTMENT, SESSION_ADJUSTMENT, DELOAD,
 EXERCISE_SWAP, ILLNESS_RECOVERY, VACATION_MODE.
 
@@ -197,6 +209,16 @@ function buildUserPrompt(
   const lines: string[] = [];
 
   lines.push('KONTEXT');
+  // Persönliche Daten (dynamisch) hier im user-message — nicht im gecachten
+  // System-Prompt, damit der Cache pro Nutzer nicht bricht.
+  const name = profile?.displayName?.trim();
+  const age = typeof profile?.age === 'number' && profile.age > 0 ? profile.age : null;
+  if (name || age != null) {
+    lines.push(`Trainierender: ${name || 'unbekannt'}${age != null ? `, ${age} Jahre` : ''}.`);
+  }
+  const goalWhy = profile?.goalWhy?.trim();
+  if (goalWhy) lines.push(`Persönliches Ziel: ${goalWhy}`);
+
   const weekBits: string[] = [`Segment: ${SEGMENT_LABEL[segment]}`, `Plan: ${framework.name}`];
   if (currentWeek) {
     weekBits.push(

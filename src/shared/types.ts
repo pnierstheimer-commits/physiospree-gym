@@ -59,8 +59,13 @@ export type SessionStatus = 'planned' | 'in_progress' | 'completed' | 'skipped';
 
 export interface UserProfile extends Syncable {
   userId: UUID;
+  /** Name/Vorname des Nutzers (Onboarding "Kurz zu dir"). */
   displayName: string;
   sex: Sex;
+  /** Alter in Jahren (Onboarding "Kurz zu dir", 15–99). */
+  age?: number;
+  /** Persönliches „Warum trainierst du?" (Onboarding, optional, ≤200 Zeichen). */
+  goalWhy?: string;
   birthYear?: number;
   heightCm?: number;
   bodyweightKg?: number;

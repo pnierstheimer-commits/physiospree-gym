@@ -93,6 +93,18 @@ export function ProfileScreen({
         </section>
 
         <section className="ps-prof-section">
+          <div className="ps-prof-label">Über dich</div>
+          <Row label="Name" value={profile?.displayName?.trim() || '—'} />
+          <Row
+            label="Alter"
+            value={
+              typeof profile?.age === 'number' && profile.age > 0 ? `${profile.age} Jahre` : '—'
+            }
+          />
+          {profile?.goalWhy?.trim() && <Row label="Warum" value={profile.goalWhy.trim()} />}
+        </section>
+
+        <section className="ps-prof-section">
           <div className="ps-prof-label">Trainings-Profil</div>
           <Row label="Segment" value={segment ? GOAL_LABEL[segment] : '—'} />
           <Row label="Level" value={profile ? LEVEL_LABEL[profile.experience] : '—'} />
