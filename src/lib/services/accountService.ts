@@ -28,13 +28,16 @@ export async function deleteAccount(): Promise<void> {
   });
 
   if (!res.ok) {
-    let detail = '';
+    let body: unknown = null;
     try {
-      const body = (await res.json()) as { message?: string };
-      if (body?.message) detail = ` — ${body.message}`;
+      body = await res.json();
     } catch {
-      /* Body nicht lesbar — generische Meldung reicht. */
+      /* Body nicht lesbar. */
     }
-    throw new Error(`Account-Löschung fehlgeschlagen (${res.status})${detail}`);
+    // TEMP DEBUG (wird nach der Messung wieder entfernt): vollständige
+    // Server-Antwort inkl. echtem Supabase-Fehler in die Konsole.
+    console.error('[deleteAccount] Server-Fehler', res.status, body);
+    const detail = (body as { message?: string } | null)?.message;
+    throw new Error(`Account-Löschung fehlgeschlagen (${res.status})${detail ? ` — ${detail}` : ''}`);
   }
 }
