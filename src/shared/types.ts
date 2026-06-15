@@ -66,6 +66,12 @@ export interface UserProfile extends Syncable {
   age?: number;
   /** Persönliches „Warum trainierst du?" (Onboarding, optional, ≤200 Zeichen). */
   goalWhy?: string;
+  /**
+   * Haftungs-/Gesundheitshinweis vor der ersten Plan-Erstellung bestätigt
+   * (DisclaimerGate). Einmalig gesetzt, persistiert in gym_user_profiles
+   * (`disclaimer_accepted`). Steuert, dass der Gate nie erneut erscheint.
+   */
+  disclaimerAccepted?: boolean;
   birthYear?: number;
   heightCm?: number;
   bodyweightKg?: number;

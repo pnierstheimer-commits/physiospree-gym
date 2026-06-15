@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useApp } from '../lib/state';
 import type { Equipment, ExperienceLevel, Goal, UserProfile } from '../shared/types';
+import { DisclaimerGate } from '../components/DisclaimerGate';
 import './screens.css';
 
 const TOTAL_STEPS = 6;
@@ -134,7 +135,7 @@ function OptionCard({ title, sub, selected, onClick }: OptionCardProps) {
 // ---------------------------------------------------------------------------
 
 export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {}) {
-  const { requestPlan, planError, clearPlan } = useApp();
+  const { state, requestPlan, planError, clearPlan } = useApp();
 
   const [step, setStep] = useState(1);
   // Schritt 1: Kurz zu dir
@@ -150,15 +151,33 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const [minutes, setMinutes] = useState<number | null>(null);
   const [equip, setEquip] = useState<EquipAnswers>(EMPTY_EQUIP);
   const [submitted, setSubmitted] = useState<UserProfile | null>(null);
+  // Profil, das auf die Disclaimer-Bestätigung wartet (Gate vor WaitingScreen).
+  const [pendingProfile, setPendingProfile] = useState<UserProfile | null>(null);
 
   // Plan-Generierung läuft als Vollbild-WaitingScreen über App.tsx (planLoading).
-  // Hier nur noch der Fehlerfall + der Wizard.
+  // Hier nur noch der Fehlerfall, der Disclaimer-Gate + der Wizard.
   if (planError) {
     return (
       <ErrorView
         message={planError}
         onRetry={() => submitted && void requestPlan(submitted)}
         onEdit={clearPlan}
+      />
+    );
+  }
+
+  // Einmaliger Haftungs-/Gesundheitshinweis: erscheint nach „Plan erstellen",
+  // direkt vor dem WaitingScreen. Erst nach Bestätigung läuft requestPlan.
+  if (pendingProfile) {
+    return (
+      <DisclaimerGate
+        onBack={() => setPendingProfile(null)}
+        onAccept={() => {
+          const profile: UserProfile = { ...pendingProfile, disclaimerAccepted: true };
+          setSubmitted(profile);
+          setPendingProfile(null);
+          void requestPlan(profile);
+        }}
       />
     );
   }
@@ -192,8 +211,14 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
       notes: buildNotes(minutes, equip),
       createdAt: now,
     };
-    setSubmitted(profile);
-    void requestPlan(profile);
+    // Disclaimer bereits früher bestätigt? Dann direkt zum Plan. Sonst Gate.
+    if (state.profile?.disclaimerAccepted) {
+      const accepted: UserProfile = { ...profile, disclaimerAccepted: true };
+      setSubmitted(accepted);
+      void requestPlan(accepted);
+    } else {
+      setPendingProfile(profile);
+    }
   };
 
   return (

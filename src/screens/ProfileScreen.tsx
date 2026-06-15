@@ -7,7 +7,15 @@
 
 import { useApp } from '../lib/state';
 import type { Equipment, ExperienceLevel, Goal } from '../shared/types';
+import type { LegalPage } from './legal/LegalScreen';
 import './screens.css';
+
+const LEGAL_LINKS: { page: LegalPage; label: string }[] = [
+  { page: 'impressum', label: 'Impressum' },
+  { page: 'datenschutz', label: 'Datenschutz' },
+  { page: 'agb', label: 'AGB' },
+  { page: 'disclaimer', label: 'Trainingshinweis' },
+];
 
 const GOAL_LABEL: Record<Goal, string> = {
   strength: 'Maximalkraft',
@@ -55,9 +63,11 @@ function Row({ label, value }: { label: string; value: string }) {
 export function ProfileScreen({
   email,
   onSignOut,
+  onOpenLegal,
 }: {
   email: string | null;
   onSignOut: () => void;
+  onOpenLegal: (page: LegalPage) => void;
 }) {
   const { state, currentPlan, clearPlan, setActiveTab } = useApp();
   const profile = state.profile;
@@ -131,6 +141,25 @@ export function ProfileScreen({
           <button type="button" className="ps-prof-reset" onClick={onReset}>
             Plan zurücksetzen
           </button>
+        </section>
+
+        <section className="ps-prof-section">
+          <div className="ps-prof-label">Rechtliches</div>
+          <div className="ps-legal-links">
+            {LEGAL_LINKS.map((l) => (
+              <button
+                key={l.page}
+                type="button"
+                className="ps-legal-link"
+                onClick={() => onOpenLegal(l.page)}
+              >
+                <span>{l.label}</span>
+                <span className="ps-legal-link-chev" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+            ))}
+          </div>
         </section>
       </div>
     </div>

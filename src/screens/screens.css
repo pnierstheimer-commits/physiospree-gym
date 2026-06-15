@@ -1959,6 +1959,111 @@
   cursor: pointer;
 }
 
+/* --- Prosa (Disclaimer + Legal-Texte) --- */
+.ps-prose {
+  font-size: 15px;
+  line-height: 1.65;
+  color: hsl(var(--foreground));
+}
+.ps-prose h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 24px 0 8px;
+}
+.ps-prose h3:first-child {
+  margin-top: 0;
+}
+.ps-prose p {
+  margin: 0 0 14px;
+}
+.ps-prose ul {
+  margin: 0 0 14px;
+  padding-left: 20px;
+}
+.ps-prose li {
+  margin-bottom: 4px;
+}
+.ps-prose a {
+  color: hsl(var(--foreground));
+  text-decoration: underline;
+  word-break: break-word;
+}
+.ps-prose-note {
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: hsl(var(--secondary) / 0.5);
+  border-radius: var(--radius);
+  font-size: 14px;
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- Disclaimer-Gate: Pflicht-Checkbox --- */
+.ps-disc-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 16px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.ps-disc-check input {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: hsl(var(--primary));
+  cursor: pointer;
+}
+
+/* --- Legal-Screen: Kopf + Links im Profil --- */
+.ps-legal-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.1;
+  align-self: center;
+}
+.ps-legal-links {
+  display: flex;
+  flex-direction: column;
+}
+.ps-legal-link {
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 2px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+  font-family: var(--font-body);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.ps-legal-link:last-child {
+  border-bottom: none;
+}
+.ps-legal-link:hover {
+  color: hsl(var(--muted-foreground));
+}
+.ps-legal-link-chev {
+  color: hsl(var(--muted-foreground));
+  font-size: 18px;
+  line-height: 1;
+}
+
 /* --- WorkoutScreen: Gesamtzeit-Uhr --- */
 .ps-wo-clock {
   display: flex;

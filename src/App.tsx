@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApp } from './lib/state'
 import { useAuth } from './lib/useAuth'
 import { fullSync, pushChanges } from './lib/sync'
@@ -11,6 +11,7 @@ import { CoachScreen } from './screens/CoachScreen'
 import { JournalScreen } from './screens/JournalScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { WaitingScreen } from './screens/WaitingScreen'
+import { LegalScreen, type LegalPage } from './screens/legal/LegalScreen'
 import { BottomNav } from './components/BottomNav'
 import type { ReactNode } from 'react'
 
@@ -32,6 +33,10 @@ function App() {
   const { state, replaceState, resetState, currentPlan, activeWorkout, activeTab, planLoading } =
     useApp()
   const userId = auth.user?.id ?? null
+
+  // Legal-Overlay (transient, nicht persistiert): aus dem Profil geöffnet,
+  // rendert als Vollbild-Screen ohne BottomNav.
+  const [legalPage, setLegalPage] = useState<LegalPage | null>(null)
 
   // Verhindert mehrfaches Sync pro Login (syncedFor = bereits gesyncte userId).
   const syncedFor = useRef<string | null>(null)
@@ -81,6 +86,9 @@ function App() {
   // Plan-Generierung: Vollbild-WaitingScreen (ohne Nav), bis der Plan eintrifft.
   if (planLoading) return <WaitingScreen />
 
+  // Legal-Seiten: eigener Vollbild-Screen ohne Nav, Back kehrt zum Profil zurück.
+  if (legalPage) return <LegalScreen page={legalPage} onBack={() => setLegalPage(null)} />
+
   // Tab-gesteuerte Screens + immer sichtbare Bottom-Nav.
   let screen: ReactNode
   switch (activeTab) {
@@ -94,7 +102,13 @@ function App() {
       screen = <JournalScreen />
       break
     case 'profile':
-      screen = <ProfileScreen email={auth.user?.email ?? null} onSignOut={handleSignOut} />
+      screen = (
+        <ProfileScreen
+          email={auth.user?.email ?? null}
+          onSignOut={handleSignOut}
+          onOpenLegal={setLegalPage}
+        />
+      )
       break
     case 'today':
     default:
