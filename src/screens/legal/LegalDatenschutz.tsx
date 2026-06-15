@@ -6,7 +6,15 @@ export function LegalDatenschutz() {
   return (
     <div className="ps-prose">
       <h3>Verantwortlicher</h3>
-      <p>[Name, Adresse, E-Mail, Telefon]</p>
+      <p>
+        Philipp Nierstheimer
+        <br />
+        Clauswitzstraße 1, 26125 Oldenburg
+        <br />
+        p.nierstheimer@gmx.de
+        <br />
+        0441 3844189
+      </p>
 
       <h3>Wir verarbeiten folgende Daten</h3>
 

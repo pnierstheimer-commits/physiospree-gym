@@ -1,4 +1,4 @@
-/** LegalImpressum — statisches Impressum (§ 5 DDG). Platzhalter [..] = TODO. */
+/** LegalImpressum — statisches Impressum (§ 5 DDG). */
 
 import '../screens.css';
 
@@ -7,13 +7,16 @@ export function LegalImpressum() {
     <div className="ps-prose">
       <h3>Angaben gemäß § 5 DDG</h3>
       <p>
-        Name: [Name]
+        Philipp Nierstheimer
         <br />
-        Anschrift: [Adresse]
+        Clauswitzstraße 1
         <br />
-        E-Mail: [E-Mail]
+        26125 Oldenburg
+      </p>
+      <p>
+        E-Mail: p.nierstheimer@gmx.de
         <br />
-        Telefon: [Telefon]
+        Telefon: 0441 3844189
       </p>
 
       <h3>Berufsbezeichnung</h3>
@@ -21,14 +24,22 @@ export function LegalImpressum() {
         Berufsbezeichnung: Physiotherapeut
         <br />
         Verliehen in: Deutschland
+      </p>
+      <p>
+        Zuständige Aufsichtsbehörde:
         <br />
-        Zuständige Aufsichtsbehörde: [TODO]
+        Gesundheitsamt Oldenburg
         <br />
+        Industriestraße 1b
+        <br />
+        26121 Oldenburg
+      </p>
+      <p>
         Berufsrechtliche Regelungen: Masseur- und Physiotherapeutengesetz (MPhG)
       </p>
 
       <h3>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h3>
-      <p>[Name], [Adresse]</p>
+      <p>Philipp Nierstheimer, Clauswitzstraße 1, 26125 Oldenburg</p>
 
       <h3>Streitbeilegung</h3>
       <p>
