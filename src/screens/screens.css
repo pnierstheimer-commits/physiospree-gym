@@ -2064,6 +2064,79 @@
   line-height: 1;
 }
 
+/* --- ProfileScreen: Account löschen (destruktiv) --- */
+.ps-prof-delete {
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: hsl(var(--status-red));
+  color: hsl(0 0% 100%);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ps-prof-delete:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.ps-prof-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* --- Bestätigungs-Dialog (Modal) --- */
+.ps-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: hsl(20 14% 4% / 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.ps-modal {
+  width: 100%;
+  max-width: 360px;
+  box-sizing: border-box;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  padding: 24px 22px;
+}
+.ps-modal-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.15;
+  color: hsl(var(--foreground));
+  margin-bottom: 10px;
+}
+.ps-modal-text {
+  font-size: 14px;
+  line-height: 1.55;
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 18px;
+}
+.ps-modal-error {
+  font-size: 13px;
+  line-height: 1.5;
+  color: hsl(var(--status-red));
+  margin: 0 0 16px;
+}
+.ps-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ps-modal-actions .ps-btn-ghost {
+  border: 1px solid hsl(var(--border));
+}
+
 /* --- WorkoutScreen: Gesamtzeit-Uhr --- */
 .ps-wo-clock {
   display: flex;

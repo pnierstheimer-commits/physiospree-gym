@@ -5,7 +5,9 @@
  * Auth-Session (über Props vom App-Root). Schlicht, Sektionen mit Trennstrich.
  */
 
+import { useState } from 'react';
 import { useApp } from '../lib/state';
+import { deleteAccount } from '../lib/services/accountService';
 import type { Equipment, ExperienceLevel, Goal } from '../shared/types';
 import type { LegalPage } from './legal/LegalScreen';
 import './screens.css';
@@ -72,6 +74,30 @@ export function ProfileScreen({
   const { state, currentPlan, clearPlan, setActiveTab } = useApp();
   const profile = state.profile;
   const fw = currentPlan?.framework ?? null;
+
+  // Account-Löschung: Bestätigungsdialog + Loading-/Fehlerzustand.
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+
+  const onConfirmDelete = async () => {
+    setDeleting(true);
+    setDeleteError(false);
+    try {
+      await deleteAccount();
+      // Erfolg: lokalen State leeren + zur Login-Seite — onSignOut kapselt beides.
+      onSignOut();
+    } catch {
+      setDeleteError(true);
+      setDeleting(false);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleting) return;
+    setShowDeleteConfirm(false);
+    setDeleteError(false);
+  };
 
   const segment: Goal | null = profile?.goal ?? fw?.goal ?? null;
   const days = profile?.daysPerWeek ?? fw?.daysPerWeek ?? null;
@@ -161,7 +187,59 @@ export function ProfileScreen({
             ))}
           </div>
         </section>
+
+        <section className="ps-prof-section">
+          <button
+            type="button"
+            className="ps-prof-delete"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            Account löschen
+          </button>
+        </section>
       </div>
+
+      {showDeleteConfirm && (
+        <div
+          className="ps-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ps-del-title"
+        >
+          <div className="ps-modal">
+            <div className="ps-modal-title" id="ps-del-title">
+              Account wirklich löschen?
+            </div>
+            <p className="ps-modal-text">
+              Alle deine Daten werden unwiderruflich gelöscht. Dieser Schritt kann nicht
+              rückgängig gemacht werden.
+            </p>
+            {deleteError && (
+              <p className="ps-modal-error">
+                Löschen fehlgeschlagen. Bitte versuche es erneut oder kontaktiere uns.
+              </p>
+            )}
+            <div className="ps-modal-actions">
+              <button
+                type="button"
+                className="ps-btn ps-btn-ghost"
+                onClick={closeDeleteDialog}
+                disabled={deleting}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="ps-prof-delete"
+                onClick={onConfirmDelete}
+                disabled={deleting}
+              >
+                {deleting ? 'Löscht…' : 'Endgültig löschen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
