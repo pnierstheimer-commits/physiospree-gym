@@ -63,20 +63,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
-    // TEMP DEBUG (wird direkt nach der Messung wieder entfernt): nur KEY-NAMEN,
-    // niemals Werte — zeigt, welche Env-Variablen die Lambda tatsächlich sieht.
     sendJson(res, 500, {
       error: 'config_error',
       message: 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY sind serverseitig nicht gesetzt.',
-      debug: {
-        hasSupabaseUrl: !!process.env.SUPABASE_URL,
-        hasViteUrl: !!process.env.VITE_SUPABASE_URL,
-        hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-        relevantKeyNames: Object.keys(process.env)
-          .filter((k) => /sup|vite|anthro|role|service|key/i.test(k))
-          .sort(),
-        allKeyNames: Object.keys(process.env).sort(),
-      },
     });
     return;
   }
