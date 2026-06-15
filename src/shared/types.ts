@@ -72,6 +72,14 @@ export interface UserProfile extends Syncable {
    * (`disclaimer_accepted`). Steuert, dass der Gate nie erneut erscheint.
    */
   disclaimerAccepted?: boolean;
+  /**
+   * Ausdrückliche Einwilligung in die Verarbeitung gesundheitsbezogener Daten
+   * (Art. 9 Abs. 2 lit. a DSGVO). Pflicht-Step im Onboarding; persistiert in
+   * gym_user_profiles (`art9_consent` + `art9_consent_at`).
+   */
+  art9Consent?: boolean;
+  /** Zeitpunkt der Art.-9-Einwilligung (ISO-String). */
+  art9ConsentAt?: ISODateString;
   birthYear?: number;
   heightCm?: number;
   bodyweightKg?: number;

@@ -14,7 +14,7 @@ import type { Equipment, ExperienceLevel, Goal, UserProfile } from '../shared/ty
 import { DisclaimerGate } from '../components/DisclaimerGate';
 import './screens.css';
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 // --- Schritt 2: Ziel ---
 const GOALS: { value: Goal; title: string; sub: string }[] = [
@@ -142,6 +142,8 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [why, setWhy] = useState('');
+  // Schritt 2: Art.-9-Einwilligung (Gesundheitsdaten) — Pflicht
+  const [art9, setArt9] = useState(false);
   // weitere Schritte
   const [goal, setGoal] = useState<Goal | null>(null);
   const [experience, setExperience] = useState<ExperienceLevel | null>(null);
@@ -193,7 +195,8 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const equipAllAnswered = EQUIP_QUESTIONS.every(({ key }) => equip[key] !== null);
 
   const finish = () => {
-    if (goal == null || experience == null || days == null || minutes == null || ageNum == null) return;
+    if (goal == null || experience == null || days == null || minutes == null || ageNum == null || !art9)
+      return;
     const now = new Date().toISOString();
     const profile: UserProfile = {
       id: uuidv4(),
@@ -209,6 +212,9 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
       equipment: deriveEquipment(equip),
       markers: [],
       notes: buildNotes(minutes, equip),
+      // Art.-9-Einwilligung (Pflicht-Step 2): bei Speichern true + Zeitstempel.
+      art9Consent: true,
+      art9ConsentAt: now,
       createdAt: now,
     };
     // Disclaimer bereits früher bestätigt? Dann direkt zum Plan. Sonst Gate.
@@ -320,6 +326,47 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
 
         {step === 2 && (
           <>
+            <div className="ps-title">Gesundheitsdaten</div>
+            <p className="ps-subtitle">Damit der Coach dich schützen kann.</p>
+            <div className="ps-prose">
+              <p>
+                Die App verarbeitet gesundheitsnahe Daten: Schlaf, Energie,
+                Muskelkater, Schmerz und Stimmung (jeweils 1–10) sowie
+                Freitext-Meldungen im Coach-Chat (z. B. Schmerzen, Krankheit).
+              </p>
+              <p>
+                Diese Daten sind nach Art. 9 DSGVO besonders geschützt. Wir
+                verwenden sie ausschließlich für dein Coaching und geben sie
+                nicht weiter — außer an die KI (Anthropic/Claude), die deinen
+                Plan und deine Coach-Antworten berechnet.
+              </p>
+            </div>
+            <label className="ps-disc-check">
+              <input
+                type="checkbox"
+                checked={art9}
+                onChange={(e) => setArt9(e.target.checked)}
+              />
+              <span>
+                Ich willige ausdrücklich in die Verarbeitung meiner
+                gesundheitsbezogenen Daten ein (Art. 9 Abs. 2 lit. a DSGVO).
+              </span>
+            </label>
+            <div className="ps-actions">
+              <button
+                type="button"
+                className="ps-btn ps-btn-primary"
+                disabled={!art9}
+                onClick={goNext}
+              >
+                Weiter
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
             <div className="ps-title">Dein Trainingsziel</div>
             <p className="ps-subtitle">Worauf zielt dieser Zyklus?</p>
             <div className="ps-cards">
@@ -339,7 +386,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <>
             <div className="ps-title">Wie lange trainierst du schon?</div>
             <p className="ps-subtitle">Bestimmt dein Progressionsmodell.</p>
@@ -361,7 +408,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <>
             <div className="ps-title">Trainingstage pro Woche</div>
             <p className="ps-subtitle">Steuert den Split.</p>
@@ -382,7 +429,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <>
             <div className="ps-title">Zeit pro Einheit</div>
             <p className="ps-subtitle">Bestimmt die Übungsanzahl.</p>
@@ -403,7 +450,7 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
           </>
         )}
 
-        {step === 6 && (
+        {step === 7 && (
           <>
             <div className="ps-title">Equipment</div>
             <p className="ps-subtitle">Vier kurze Fragen zu deinem Studio.</p>
