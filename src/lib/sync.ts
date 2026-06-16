@@ -494,9 +494,10 @@ export async function pushChanges(
   const supabase = getSupabase();
   if (!supabase) return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: 'offline' };
 
-  // Delta-Filter: bei gesetztem `since` nur echt-neuere Entitäten.
-  const after = <T extends { updatedAt: string }>(items: T[]): T[] =>
-    since == null ? items : items.filter((it) => isNewerTs(it.updatedAt, since));
+  // Push-Filter: getombstonete Rows (deletedAt) gehen NIE raus; bei gesetztem
+  // `since` zusätzlich nur echt-neuere Entitäten (P2-Delta).
+  const after = <T extends { updatedAt: string; deletedAt?: string | null }>(items: T[]): T[] =>
+    items.filter((it) => !it.deletedAt && (since == null || isNewerTs(it.updatedAt, since)));
 
   let pushed = 0;
   const fail = (error: string): SyncResult => ({ ok: false, pushed, pulled: 0, syncedAt: now, error });
@@ -513,7 +514,11 @@ export async function pushChanges(
     return null;
   };
 
-  if (state.profile && (since == null || isNewerTs(state.profile.updatedAt, since))) {
+  if (
+    state.profile &&
+    !state.profile.deletedAt &&
+    (since == null || isNewerTs(state.profile.updatedAt, since))
+  ) {
     const e = await push('gym_user_profiles', [profileToRow(state.profile, userId)], 'user_id', 'user_id');
     if (e) return fail(e);
   }
@@ -524,8 +529,9 @@ export async function pushChanges(
   // Wochen aus ALLEN Frameworks, nach updatedAt gefiltert (FK-Eltern sind, falls
   // neu, ebenfalls neuer-als-since und damit oben enthalten).
   const weekPairs = frameworks.flatMap((f) => f.weeks.map((w) => ({ w, fwId: f.id })));
-  const freshWeeks =
-    since == null ? weekPairs : weekPairs.filter((p) => isNewerTs(p.w.updatedAt, since));
+  const freshWeeks = weekPairs.filter(
+    (p) => !p.w.deletedAt && (since == null || isNewerTs(p.w.updatedAt, since)),
+  );
   e = await push('gym_plan_weeks', freshWeeks.map((p) => weekToRow(p.w, p.fwId, userId)));
   if (e) return fail(e);
 
@@ -611,10 +617,13 @@ export async function pullChanges(userId: string): Promise<PersistedState> {
   base.coachActions = ((actions.data as Row[]) ?? []).map(rowToAction);
   base.chatMessages = ((chat.data as Row[]) ?? []).map(rowToChat);
 
-  // currentPlan = aktives Framework (Fallback: zuletzt aktualisiert) + dessen Actions.
+  // currentPlan = aktives, NICHT getombstonetes Framework (Fallback: zuletzt
+  // aktualisiert) + dessen Actions. Getombstonete Frameworks (deletedAt) bleiben
+  // in base.frameworks erhalten, damit der Merge sie auf anderen Geräten sieht.
+  const live = base.frameworks.filter((f) => !f.deletedAt);
   const active =
-    base.frameworks.find((f) => f.status === 'active') ??
-    [...base.frameworks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
+    live.find((f) => f.status === 'active') ??
+    [...live].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
     null;
   if (active) {
     base.currentPlan = {
@@ -630,13 +639,18 @@ export async function pullChanges(userId: string): Promise<PersistedState> {
 // Merge (Last-Write-Wins über updatedAt; Workouts append-only Union)
 // ---------------------------------------------------------------------------
 
-function mergeById<T extends { id: string; updatedAt: string }>(local: T[], server: T[]): T[] {
+function mergeById<T extends { id: string; updatedAt: string; deletedAt?: string | null }>(
+  local: T[],
+  server: T[],
+): T[] {
   const map = new Map<string, T>();
   for (const r of [...server, ...local]) {
     const ex = map.get(r.id);
     if (!ex || r.updatedAt >= ex.updatedAt) map.set(r.id, r);
   }
-  return [...map.values()];
+  // Tombstones (deletedAt) fallen aus dem lokalen State raus — die gewinnende
+  // (neueste) Version entscheidet. So propagiert ein Server-Delete auf alle Geräte.
+  return [...map.values()].filter((r) => !r.deletedAt);
 }
 
 function pickNewer<T extends { updatedAt: string }>(a: T | null, b: T | null): T | null {
@@ -653,6 +667,17 @@ function mergePlan(local: PlanResponse | null, server: PlanResponse | null): Pla
 
 function mergeStates(local: PersistedState, server: PersistedState): PersistedState {
   const now = new Date().toISOString();
+
+  // Tombstone-Reconciliation: hat der Server ein Framework getombstonet, fällt
+  // ein evtl. noch lokal vorhandener currentPlan dafür weg (Cross-Device-Delete).
+  const serverTombstonedFwIds = new Set(
+    server.frameworks.filter((f) => f.deletedAt).map((f) => f.id),
+  );
+  let currentPlan = mergePlan(local.currentPlan, server.currentPlan);
+  if (currentPlan && serverTombstonedFwIds.has(currentPlan.framework.id)) {
+    currentPlan = null;
+  }
+
   return {
     ...local,
     profile: pickNewer(local.profile, server.profile),
@@ -661,7 +686,7 @@ function mergeStates(local: PersistedState, server: PersistedState): PersistedSt
     checkins: mergeById(local.checkins, server.checkins),
     coachActions: mergeById(local.coachActions, server.coachActions),
     chatMessages: mergeById(local.chatMessages, server.chatMessages),
-    currentPlan: mergePlan(local.currentPlan, server.currentPlan),
+    currentPlan,
     // Lokale-only Felder (markers, parsedMarkers, exercises) bleiben aus local.
     schemaVersion: SCHEMA_VERSION,
     stateUpdatedAt: now,
@@ -701,16 +726,17 @@ export async function fullSync(userId: string, localState: PersistedState): Prom
 }
 
 // ---------------------------------------------------------------------------
-// Plan-Reset (P4): serverseitige Plan-Daten löschen, damit andere Geräte den
-// Plan nicht wieder runterziehen. NUR Plan (Workouts bleiben erhalten).
+// Plan-Reset (P4 + Tombstones): serverseitig deleted_at setzen, damit der
+// Delete auf alle Geräte propagiert. NUR Plan (Workouts bleiben erhalten).
 // ---------------------------------------------------------------------------
 
 /**
- * Löscht alle Plan-Rows des eingeloggten Nutzers auf dem Server — FK-sicher:
- * Kinder (gym_plan_weeks) vor Eltern (gym_plan_frameworks). Workouts/Verlauf
- * bleiben unangetastet. Die user_id kommt aus der Session (RLS schützt: nur
- * eigene Rows). Offline / keine Session -> no-op (lokaler Reset passiert
- * trotzdem im State).
+ * Tombstonet alle Plan-Rows des eingeloggten Nutzers auf dem Server (deleted_at
+ * = now), FK-sicher Kinder zuerst (gym_plan_weeks) vor Eltern
+ * (gym_plan_frameworks). Workouts/Verlauf bleiben unangetastet. `updated_at`
+ * wird vom DB-Trigger (trg_set_updated_at) automatisch gebumpt, damit der
+ * Tombstone beim Merge per LWW gewinnt. user_id kommt aus der Session (RLS:
+ * nur eigene Rows). Offline / keine Session -> no-op (lokaler Reset trotzdem).
  */
 export async function deletePlanRows(): Promise<SyncResult> {
   const now = new Date().toISOString();
@@ -721,12 +747,22 @@ export async function deletePlanRows(): Promise<SyncResult> {
   const uid = userData?.user?.id;
   if (!uid) return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: 'no_user' };
 
-  // Kinder zuerst (FK), dann Eltern — gleiche Reihenfolge wie Account-Löschung.
-  const weeks = await supabase.from('gym_plan_weeks').delete().eq('user_id', uid);
+  // Kinder zuerst, dann Eltern. Nur noch nicht getombstonete Rows anfassen.
+  // updated_at explizit mit setzen (zusätzlich zum DB-Trigger), damit der
+  // Tombstone beim LWW-Merge garantiert gewinnt.
+  const weeks = await supabase
+    .from('gym_plan_weeks')
+    .update({ deleted_at: now, updated_at: now })
+    .eq('user_id', uid)
+    .is('deleted_at', null);
   if (weeks.error) {
     return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: `gym_plan_weeks: ${weeks.error.message}` };
   }
-  const frameworks = await supabase.from('gym_plan_frameworks').delete().eq('user_id', uid);
+  const frameworks = await supabase
+    .from('gym_plan_frameworks')
+    .update({ deleted_at: now, updated_at: now })
+    .eq('user_id', uid)
+    .is('deleted_at', null);
   if (frameworks.error) {
     return {
       ok: false,
