@@ -1,0 +1,6 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" fill="#000000"/>
+  <text x="256" y="256" fill="#ffffff" font-family="'Inter Tight', sans-serif"
+        font-weight="300" font-size="120" letter-spacing="26"
+        text-anchor="middle" dominant-baseline="central">GYM</text>
+</svg>
