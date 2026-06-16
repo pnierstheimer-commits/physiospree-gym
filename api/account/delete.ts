@@ -53,23 +53,6 @@ function bearerToken(req: VercelRequest): string | null {
   return m ? m[1].trim() : null;
 }
 
-// TEMP DEBUG (wird nach der Messung wieder entfernt): extrahiert die echten
-// Supabase-/Postgrest-Fehlerfelder (message/code/details/hint/status/name)
-// statt nur einer generischen Meldung.
-function errInfo(e: unknown): Record<string, unknown> {
-  if (e == null) return { value: String(e) };
-  if (typeof e !== 'object') return { value: String(e) };
-  const o = e as Record<string, unknown>;
-  return {
-    message: o.message,
-    code: o.code,
-    details: o.details,
-    hint: o.hint,
-    status: o.status,
-    name: o.name,
-  };
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -93,64 +76,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // TEMP DEBUG: alles in try/catch, damit auch unerwartete Throws (createClient,
-  // getUser, Admin-API) als JSON mit echtem Fehler zurückkommen statt als
-  // nackter Vercel-500 ohne Body.
-  try {
-    // Admin-Client (Service Role): umgeht RLS + erlaubt die Admin-Auth-API.
-    const admin = createClient(url, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+  // Admin-Client (Service Role): umgeht RLS + erlaubt die Admin-Auth-API.
+  const admin = createClient(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 
-    // user_id aus dem Token auflösen — verhindert Löschen fremder Accounts.
-    const { data: userData, error: userErr } = await admin.auth.getUser(token);
-    const userId = userData?.user?.id;
-    if (userErr || !userId) {
-      sendJson(res, 401, {
-        error: 'unauthorized',
-        message: 'Token ungültig oder abgelaufen.',
-        debug: { step: 'getUser', err: errInfo(userErr) },
-      });
-      return;
-    }
+  // user_id aus dem Token auflösen — verhindert Löschen fremder Accounts.
+  const { data: userData, error: userErr } = await admin.auth.getUser(token);
+  const userId = userData?.user?.id;
+  if (userErr || !userId) {
+    sendJson(res, 401, { error: 'unauthorized', message: 'Token ungültig oder abgelaufen.' });
+    return;
+  }
 
-    // 1) Alle gym_-Tabellen leeren (Kinder zuerst, Profile zuletzt).
-    const deleted: Record<string, boolean> = {};
-    for (const table of GYM_TABLES_DELETE_ORDER) {
-      const { error } = await admin.from(table).delete().eq('user_id', userId);
-      if (error) {
-        sendJson(res, 500, {
-          error: 'delete_failed',
-          table,
-          deleted,
-          debug: { step: `delete:${table}`, err: errInfo(error) },
-        });
-        return;
-      }
-      deleted[table] = true;
-    }
-
-    // 2) Auth-User löschen (Supabase Admin API).
-    const { error: authErr } = await admin.auth.admin.deleteUser(userId);
-    if (authErr) {
+  // 1) Alle gym_-Tabellen leeren (Kinder zuerst, Profile zuletzt).
+  const deleted: Record<string, boolean> = {};
+  for (const table of GYM_TABLES_DELETE_ORDER) {
+    const { error } = await admin.from(table).delete().eq('user_id', userId);
+    if (error) {
       sendJson(res, 500, {
-        error: 'auth_delete_failed',
+        error: 'delete_failed',
+        message: `Löschen aus ${table} fehlgeschlagen: ${error.message}`,
+        table,
         deleted,
-        debug: { step: 'deleteUser', err: errInfo(authErr) },
       });
       return;
     }
+    deleted[table] = true;
+  }
 
-    sendJson(res, 200, { ok: true, userId, tables: Object.keys(deleted) });
-  } catch (e) {
+  // 2) Auth-User löschen (Supabase Admin API).
+  const { error: authErr } = await admin.auth.admin.deleteUser(userId);
+  if (authErr) {
     sendJson(res, 500, {
-      error: 'exception',
-      debug: {
-        step: 'thrown',
-        err: errInfo(e),
-        stack: e instanceof Error && e.stack ? e.stack.split('\n').slice(0, 5) : undefined,
-      },
+      error: 'auth_delete_failed',
+      message: `Auth-User konnte nicht gelöscht werden: ${authErr.message}`,
+      deleted,
     });
     return;
   }
+
+  sendJson(res, 200, { ok: true, userId, tables: Object.keys(deleted) });
 }
