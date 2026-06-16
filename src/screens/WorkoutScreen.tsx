@@ -1,13 +1,15 @@
 /**
  * WorkoutScreen — Workout-Player.
  *
- * Eine Übung im Fokus: Sätze eintragen (Gewicht/Reps/RPE), automatischer
- * Pause-Timer, Übungswechsel, Zusammenfassung und Speichern. UI-only (Regel 3):
- * keine Trainingsentscheidungen, nur Erfassung der Satz-Daten (Regel 6).
+ * Eine Gruppe im Fokus: klassische Einzelübung (alle Sätze nacheinander),
+ * Supersatz (A1/A2 im Wechsel, Pause nach dem Paar) oder Zirkel (Z1→Z2→Z3 je
+ * ein Satz, kurze Wechselpause, Rundenpause). Erkennung über den Prefix im
+ * Übungsnamen (exerciseGroupService). UI-only (Regel 3); Satz-Daten bleiben
+ * pro Übung gespeichert (Regel 6) — die Gruppierung ist nur Anzeige + Flow.
  *
- * Daten: `activeWorkout` (state) hält die geloggten Sätze, die geplante
- * Einheit (Ziele) wird über `plannedSessionId` aus `currentPlan` aufgelöst.
- * Übungsname steckt in `notes` ("Name — cue").
+ * Daten: `activeWorkout` (state) hält die geloggten Sätze, die geplante Einheit
+ * (Ziele) wird über `plannedSessionId` aus `currentPlan` aufgelöst. Übungsname
+ * steckt in `notes` ("[Prefix] Name — cue").
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -20,10 +22,18 @@ import {
   type CoachEvaluationItem,
   type Verdict,
 } from '../lib/services/coachService';
+import {
+  groupExercises,
+  parsePrefix,
+  type ExerciseGroup,
+} from '../lib/services/exerciseGroupService';
 import type { Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
 import './screens.css';
 
 const RPE_OPTIONS = [6, 7, 8, 9, 10];
+/** Feste Zirkel-Pausen (Sekunden). */
+const CIRCUIT_SWITCH_REST = 15;
+const CIRCUIT_ROUND_REST = 60;
 
 const VERDICT_META: Record<Verdict, { label: string; tone: 'green' | 'red' | 'yellow' }> = {
   in_range: { label: 'Im Ziel', tone: 'green' },
@@ -43,6 +53,8 @@ interface ExView {
   index: number;
   name: string;
   cue: string | null;
+  /** Prefix-Buchstabe ('A','Z') oder null bei klassisch. */
+  label: string | null;
   we: WorkoutExercise;
   targetSets: number;
   repMin: number;
@@ -50,6 +62,14 @@ interface ExView {
   targetRPE: number;
   restSeconds: number;
   suggestedLoadKg: number | null;
+}
+
+/** 'pos' = Zirkel-Wechsel (nächste Übung), 'round' = nächste Runde, null = klassische Pause. */
+type Advance = 'pos' | 'round' | null;
+interface Timer {
+  secondsLeft: number;
+  key: string;
+  advance: Advance;
 }
 
 /** Trennt Übungsname und Cue aus dem notes-Feld ("Name — cue"). */
@@ -88,6 +108,17 @@ function formatSetsSummary(sets: WorkoutSet[]): string {
   return `${load} kg × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
 }
 
+/** Ziel-Zeile einer Übung: "3 × 8–12 @ 40 kg · RPE 8". */
+function targetText(ev: ExView): string {
+  const reps = ev.repMin === ev.repMax ? `${ev.repMin}` : `${ev.repMin}–${ev.repMax}`;
+  if (!ev.repMin && !ev.repMax) return `${ev.targetSets} Sätze`;
+  return (
+    `${ev.targetSets} × ${reps}` +
+    (ev.suggestedLoadKg != null ? ` @ ${ev.suggestedLoadKg} kg` : '') +
+    ` · RPE ${ev.targetRPE}`
+  );
+}
+
 /** Adjustment-Zeile mit Pfeil + Delta. */
 function adjustmentLine(item: CoachEvaluationItem): string {
   if (item.adjustment === 'maintain' || item.newLoad == null) return '→ Gewicht bleibt';
@@ -103,10 +134,13 @@ export function WorkoutScreen() {
   const { activeWorkout, currentPlan, logSet, completeWorkout, abortWorkout, applyMarkers } =
     useApp();
 
-  const [exIndex, setExIndex] = useState(0);
+  // Gruppen-basierte Navigation: groupIndex + (für Supersatz/Zirkel) round + pos.
+  const [groupIndex, setGroupIndex] = useState(0);
+  const [round, setRound] = useState(1);
+  const [pos, setPos] = useState(0);
   const [phase, setPhase] = useState<'train' | 'summary' | 'evaluating' | 'evaluation'>('train');
   const [inputs, setInputs] = useState<Record<string, SetInput>>({});
-  const [timer, setTimer] = useState<{ secondsLeft: number; key: string } | null>(null);
+  const [timer, setTimer] = useState<Timer | null>(null);
   const [evaluation, setEvaluation] = useState<CoachEvaluation | null>(null);
   const [evalError, setEvalError] = useState<string | null>(null);
   // Gesamtzeit-Uhr: tickt jede Sekunde, abgeleitet aus startedAt.
@@ -126,13 +160,26 @@ export function WorkoutScreen() {
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
 
-  // Pause-Timer-Countdown.
+  // Pause-/Wechsel-Timer. Bei 0: Supersatz/Zirkel rückt automatisch weiter
+  // (advance), klassische Pause bleibt auf "Pause vorbei" stehen.
   useEffect(() => {
     if (!timer || timer.secondsLeft <= 0) return;
-    const id = setTimeout(
-      () => setTimer((t) => (t ? { ...t, secondsLeft: t.secondsLeft - 1 } : t)),
-      1000,
-    );
+    const id = setTimeout(() => {
+      if (timer.secondsLeft <= 1) {
+        if (timer.advance === 'pos') {
+          setPos((p) => p + 1);
+          setTimer(null);
+        } else if (timer.advance === 'round') {
+          setRound((r) => r + 1);
+          setPos(0);
+          setTimer(null);
+        } else {
+          setTimer((t) => (t ? { ...t, secondsLeft: 0 } : t)); // klassisch: stehen bleiben
+        }
+      } else {
+        setTimer((t) => (t ? { ...t, secondsLeft: t.secondsLeft - 1 } : t));
+      }
+    }, 1000);
     return () => clearTimeout(id);
   }, [timer]);
 
@@ -150,11 +197,13 @@ export function WorkoutScreen() {
   const plannedExs = planned ? [...planned.exercises].sort((a, b) => a.order - b.order) : [];
   const exViews: ExView[] = activeWorkout.exercises.map((we, i) => {
     const pe = plannedExs[i];
-    const { name, cue } = splitExercise(we.notes);
+    const split = splitExercise(we.notes);
+    const { letter, name } = parsePrefix(split.name);
     return {
       index: i,
       name,
-      cue,
+      cue: split.cue,
+      label: letter,
       we,
       targetSets: pe?.targetSets ?? Math.max(we.sets.length, 1),
       repMin: pe ? pe.targetReps[0] : 0,
@@ -165,8 +214,14 @@ export function WorkoutScreen() {
     };
   });
 
-  const total = exViews.length;
+  // Fallback (kein Prefix) -> lauter 'single'-Gruppen = klassischer Flow.
+  const groups = groupExercises(exViews.map((e) => e.label));
+  const groupIdx = Math.min(groupIndex, groups.length - 1);
+  const group = groups[groupIdx];
   const isCalibration = /kalibr/i.test(activeWorkout.name);
+
+  const roundsOf = (g: ExerciseGroup): number => Math.max(1, exViews[g.indices[0]].targetSets);
+  const pairRestOf = (g: ExerciseGroup): number => exViews[g.indices[0]].restSeconds;
 
   // Aktueller Eingabewert eines Satzes (controlled): Draft oder abgeleitet.
   const valueOf = (ev: ExView, sn: number): SetInput => {
@@ -185,15 +240,13 @@ export function WorkoutScreen() {
     };
   };
 
-  const updateSet = (ev: ExView, sn: number, patch: Partial<SetInput>) => {
-    const key = `${ev.index}:${sn}`;
+  /** Schreibt einen Satz (Inputs + ggf. logSet). Gibt zurück, ob er JETZT fertig wurde. */
+  const applySet = (ev: ExView, sn: number, patch: Partial<SetInput>): boolean => {
     const cur = valueOf(ev, sn);
     const next = { ...cur, ...patch };
-    setInputs((prev) => ({ ...prev, [key]: next }));
-
-    const wasComplete = setComplete(cur);
-    const nowComplete = setComplete(next);
-    if (nowComplete) {
+    setInputs((prev) => ({ ...prev, [`${ev.index}:${sn}`]: next }));
+    const becameComplete = !setComplete(cur) && setComplete(next);
+    if (setComplete(next)) {
       const existing = ev.we.sets.find((s) => s.setNumber === sn);
       const wset: WorkoutSet = {
         id: existing?.id ?? uuidv4(),
@@ -208,24 +261,65 @@ export function WorkoutScreen() {
         isWarmup: false,
       };
       logSet(ev.index, wset);
-      if (!wasComplete) setTimer({ secondsLeft: ev.restSeconds, key });
+    }
+    return becameComplete;
+  };
+
+  // Klassischer Satz: nach Abschluss Pause-Timer (wie bisher).
+  const onSingleSet = (ev: ExView, sn: number, patch: Partial<SetInput>) => {
+    if (applySet(ev, sn, patch)) {
+      setTimer({ secondsLeft: ev.restSeconds, key: `s:${ev.index}:${sn}`, advance: null });
     }
   };
 
-  const exerciseComplete = (ev: ExView): boolean => {
-    for (let sn = 1; sn <= ev.targetSets; sn++) {
-      if (!setComplete(valueOf(ev, sn))) return false;
+  // Supersatz/Zirkel: nach Abschluss des aktiven Satzes (Runde = round) weiter.
+  const onRoundSet = (ev: ExView, p: number, patch: Partial<SetInput>) => {
+    if (!applySet(ev, round, patch)) return;
+    const isLast = p === group.indices.length - 1;
+    const rounds = roundsOf(group);
+    const key = `${group.label}:${round}:${p}`;
+    if (group.type === 'superset') {
+      if (!isLast) setPos(p + 1); // A1 -> A2 ohne Pause
+      else if (round < rounds) setTimer({ secondsLeft: pairRestOf(group), key, advance: 'round' });
+      // sonst: Gruppe fertig (Nav-Button)
+    } else {
+      // circuit
+      if (!isLast) setTimer({ secondsLeft: CIRCUIT_SWITCH_REST, key, advance: 'pos' });
+      else if (round < rounds) setTimer({ secondsLeft: CIRCUIT_ROUND_REST, key, advance: 'round' });
     }
-    return true;
   };
 
-  const goPrev = () => {
+  const skipTimer = () => {
+    if (timer?.advance === 'pos') setPos((p) => p + 1);
+    else if (timer?.advance === 'round') {
+      setRound((r) => r + 1);
+      setPos(0);
+    }
     setTimer(null);
-    setExIndex((i) => Math.max(0, i - 1));
+  };
+
+  /** Ganze Gruppe fertig = alle Übungen über alle Runden komplett. */
+  const groupComplete = (g: ExerciseGroup): boolean => {
+    const rounds = roundsOf(g);
+    return g.indices.every((idx) => {
+      const ev = exViews[idx];
+      for (let r = 1; r <= rounds; r++) if (!setComplete(valueOf(ev, r))) return false;
+      return true;
+    });
+  };
+
+  const resetGroupState = () => {
+    setRound(1);
+    setPos(0);
+    setTimer(null);
+  };
+  const goPrev = () => {
+    resetGroupState();
+    setGroupIndex((g) => Math.max(0, g - 1));
   };
   const goNext = () => {
-    setTimer(null);
-    if (exIndex < total - 1) setExIndex((i) => i + 1);
+    resetGroupState();
+    if (groupIdx < groups.length - 1) setGroupIndex(groupIdx + 1);
     else setPhase('summary');
   };
 
@@ -235,9 +329,7 @@ export function WorkoutScreen() {
     }
   };
 
-  // Speichern -> Coach-Auswertung anfordern (Workout noch nicht committen,
-  // sonst verschwindet der Screen). Snapshot mit status 'completed' für den
-  // Endpoint-Guard.
+  // Speichern -> Coach-Auswertung anfordern.
   const onSave = async () => {
     if (!currentPlan) {
       completeWorkout();
@@ -259,7 +351,6 @@ export function WorkoutScreen() {
     }
   };
 
-  // "Verstanden": Marker anwenden, Workout committen -> zurück zum PlanScreen.
   const onAcknowledge = () => {
     if (evaluation) applyMarkers(convertCoachMarkers(evaluation.markers));
     completeWorkout();
@@ -387,11 +478,7 @@ export function WorkoutScreen() {
             <button type="button" className="ps-btn ps-btn-primary" onClick={onSave}>
               Workout speichern
             </button>
-            <button
-              type="button"
-              className="ps-btn ps-btn-ghost"
-              onClick={() => setPhase('train')}
-            >
+            <button type="button" className="ps-btn ps-btn-ghost" onClick={() => setPhase('train')}>
               Zurück zum Training
             </button>
           </div>
@@ -401,26 +488,54 @@ export function WorkoutScreen() {
   }
 
   // -------------------------------------------------------------------------
-  // Training (eine Übung im Fokus)
+  // Training (eine Gruppe im Fokus)
   // -------------------------------------------------------------------------
-  const ev = exViews[Math.min(exIndex, total - 1)];
-  const reps = ev.repMin === ev.repMax ? `${ev.repMin}` : `${ev.repMin}–${ev.repMax}`;
-  const target =
-    ev.repMin || ev.repMax
-      ? `${ev.targetSets} × ${reps}` +
-        (ev.suggestedLoadKg != null ? ` @ ${ev.suggestedLoadKg} kg` : '') +
-        ` · RPE ${ev.targetRPE}`
-      : `${ev.targetSets} Sätze`;
-  const canAdvance = exerciseComplete(ev);
+  const isLastGroup = groupIdx >= groups.length - 1;
+  const canAdvance = groupComplete(group);
   const startMs = Date.parse(activeWorkout.startedAt ?? activeWorkout.date);
   const elapsedSeconds = Number.isNaN(startMs) ? 0 : Math.max(0, Math.floor((nowTs - startMs) / 1000));
+
+  const rounds = roundsOf(group);
+  let groupHead = '';
+  if (group.type === 'superset') {
+    groupHead = `Supersatz ${group.label}${rounds > 1 ? ` — Runde ${round} von ${rounds}` : ''}`;
+  } else if (group.type === 'circuit') {
+    groupHead = `Zirkel${rounds > 1 ? ` — Runde ${round} von ${rounds}` : ''} — Übung ${group.label}${pos + 1}`;
+  }
+
+  const renderRpe = (
+    ev: ExView,
+    sn: number,
+    disabled: boolean,
+    onPick: (rpe: number) => void,
+  ) => {
+    const v = valueOf(ev, sn);
+    return (
+      <div className="ps-rpe-wrap">
+        <span className="ps-field-label">RPE</span>
+        <div className="ps-rpe">
+          {RPE_OPTIONS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              className={`ps-rpe-btn${v.rpe === r ? ' is-active' : ''}`}
+              disabled={disabled}
+              onClick={() => onPick(r)}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="ps-screen">
       <div className="ps-shell">
         <div className="ps-topbar">
           <span className="ps-progress-label">
-            Übung {exIndex + 1} von {total}
+            Abschnitt {groupIdx + 1} von {groups.length}
           </span>
           <button type="button" className="ps-abort" onClick={onAbort}>
             Abbrechen
@@ -441,79 +556,136 @@ export function WorkoutScreen() {
           </div>
         )}
 
-        <div className="ps-ex-focus-name">{ev.name}</div>
-        <div className="ps-target">{target}</div>
-        {ev.cue && <p className="ps-ex-cue ps-target-cue">{ev.cue}</p>}
-
-        <div className="ps-sets">
-          {Array.from({ length: ev.targetSets }, (_, k) => {
-            const sn = k + 1;
-            const v = valueOf(ev, sn);
-            const done = setComplete(v);
+        {group.type === 'single' ? (
+          // -------- Klassischer Satz (unverändert) --------
+          (() => {
+            const ev = exViews[group.indices[0]];
             return (
-              <div key={sn} className={`ps-set${done ? ' is-done' : ''}`}>
-                <div className="ps-set-head">
-                  <span>Satz {sn}</span>
-                  {done && <span className="ps-set-check">✓</span>}
+              <>
+                <div className="ps-ex-focus-name">{ev.name}</div>
+                <div className="ps-target">{targetText(ev)}</div>
+                {ev.cue && <p className="ps-ex-cue ps-target-cue">{ev.cue}</p>}
+
+                <div className="ps-sets">
+                  {Array.from({ length: ev.targetSets }, (_, k) => {
+                    const sn = k + 1;
+                    const v = valueOf(ev, sn);
+                    const done = setComplete(v);
+                    return (
+                      <div key={sn} className={`ps-set${done ? ' is-done' : ''}`}>
+                        <div className="ps-set-head">
+                          <span>Satz {sn}</span>
+                          {done && <span className="ps-set-check">✓</span>}
+                        </div>
+                        <div className="ps-set-inputs">
+                          <label className="ps-field">
+                            <span className="ps-field-label">Gewicht (kg)</span>
+                            <input
+                              className="ps-input"
+                              type="number"
+                              inputMode="decimal"
+                              value={v.weight}
+                              onFocus={() => setTimer(null)}
+                              onChange={(e) => onSingleSet(ev, sn, { weight: e.target.value })}
+                            />
+                          </label>
+                          <label className="ps-field">
+                            <span className="ps-field-label">Reps</span>
+                            <input
+                              className="ps-input"
+                              type="number"
+                              inputMode="numeric"
+                              value={v.reps}
+                              onFocus={() => setTimer(null)}
+                              onChange={(e) => onSingleSet(ev, sn, { reps: e.target.value })}
+                            />
+                          </label>
+                        </div>
+                        {renderRpe(ev, sn, false, (r) => onSingleSet(ev, sn, { rpe: r }))}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="ps-set-inputs">
-                  <label className="ps-field">
-                    <span className="ps-field-label">Gewicht (kg)</span>
-                    <input
-                      className="ps-input"
-                      type="number"
-                      inputMode="decimal"
-                      value={v.weight}
-                      onFocus={() => setTimer(null)}
-                      onChange={(e) => updateSet(ev, sn, { weight: e.target.value })}
-                    />
-                  </label>
-                  <label className="ps-field">
-                    <span className="ps-field-label">Reps</span>
-                    <input
-                      className="ps-input"
-                      type="number"
-                      inputMode="numeric"
-                      value={v.reps}
-                      onFocus={() => setTimer(null)}
-                      onChange={(e) => updateSet(ev, sn, { reps: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className="ps-rpe-wrap">
-                  <span className="ps-field-label">RPE</span>
-                  <div className="ps-rpe">
-                    {RPE_OPTIONS.map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        className={`ps-rpe-btn${v.rpe === r ? ' is-active' : ''}`}
-                        onClick={() => updateSet(ev, sn, { rpe: r })}
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              </>
             );
-          })}
-        </div>
+          })()
+        ) : (
+          // -------- Supersatz / Zirkel (rundenbasiert) --------
+          <div className={`ps-group ps-group-${group.type}`}>
+            <div className="ps-group-head">{groupHead}</div>
+            {group.indices.map((idx, p) => {
+              const gev = exViews[idx];
+              const v = valueOf(gev, round);
+              const done = setComplete(v);
+              const isActive = p === pos && !done && !timer?.advance;
+              const isWaiting = !isActive && !done;
+              return (
+                <div
+                  key={gev.we.id}
+                  className={`ps-group-ex${isActive ? ' is-active' : ''}${isWaiting ? ' is-waiting' : ''}${done ? ' is-done' : ''}`}
+                >
+                  <div className="ps-group-ex-head">
+                    <span className="ps-group-ex-badge">
+                      {group.label}
+                      {p + 1}
+                    </span>
+                    <span className="ps-group-ex-name">{gev.name}</span>
+                    {done && <span className="ps-set-check">✓</span>}
+                  </div>
+                  <div className="ps-group-ex-target">{targetText(gev)}</div>
+                  <div className="ps-set-inputs">
+                    <label className="ps-field">
+                      <span className="ps-field-label">Gewicht (kg)</span>
+                      <input
+                        className="ps-input"
+                        type="number"
+                        inputMode="decimal"
+                        value={v.weight}
+                        disabled={!isActive}
+                        onChange={(e) => onRoundSet(gev, p, { weight: e.target.value })}
+                      />
+                    </label>
+                    <label className="ps-field">
+                      <span className="ps-field-label">Reps</span>
+                      <input
+                        className="ps-input"
+                        type="number"
+                        inputMode="numeric"
+                        value={v.reps}
+                        disabled={!isActive}
+                        onChange={(e) => onRoundSet(gev, p, { reps: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  {renderRpe(gev, round, !isActive, (r) => onRoundSet(gev, p, { rpe: r }))}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {timer && (
           <div className={`ps-timer${timer.secondsLeft <= 0 ? ' is-done' : ''}`}>
             <span className="ps-timer-label">
-              {timer.secondsLeft <= 0 ? 'Pause vorbei' : 'Pause'}
+              {timer.secondsLeft <= 0 && !timer.advance
+                ? 'Pause vorbei'
+                : timer.advance === 'pos'
+                  ? 'Wechsel'
+                  : 'Pause'}
             </span>
             <span className="ps-timer-num">{formatTime(timer.secondsLeft)}</span>
-            <button type="button" className="ps-btn ps-btn-ghost ps-btn-quiet" onClick={() => setTimer(null)}>
-              Überspringen
+            <button
+              type="button"
+              className="ps-btn ps-btn-ghost ps-btn-quiet"
+              onClick={skipTimer}
+            >
+              {timer.advance ? 'Weiter' : 'Überspringen'}
             </button>
           </div>
         )}
 
         <div className="ps-nav">
-          {exIndex > 0 && (
+          {groupIdx > 0 && (
             <button type="button" className="ps-btn ps-btn-ghost" onClick={goPrev}>
               Zurück
             </button>
@@ -524,7 +696,7 @@ export function WorkoutScreen() {
             disabled={!canAdvance}
             onClick={goNext}
           >
-            {exIndex < total - 1 ? 'Nächste Übung' : 'Workout abschließen'}
+            {isLastGroup ? 'Workout abschließen' : 'Weiter'}
           </button>
         </div>
       </div>

@@ -703,6 +703,74 @@
   color: hsl(var(--status-green));
   font-size: 16px;
 }
+
+/* --- Supersatz / Zirkel (rundenbasierte Gruppe) --- */
+.ps-group {
+  margin-top: 22px;
+  padding: 14px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 1.1rem;
+  background: hsl(var(--secondary) / 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ps-group-head {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.ps-group-ex {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  border-radius: 1rem;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: opacity 140ms ease;
+}
+.ps-group-ex.is-waiting {
+  opacity: 0.45;
+}
+.ps-group-ex.is-active {
+  border-color: hsl(var(--foreground) / 0.45);
+}
+.ps-group-ex.is-done {
+  background: hsl(var(--status-green-soft));
+  border-color: hsl(var(--status-green) / 0.4);
+}
+.ps-group-ex-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ps-group-ex-badge {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--primary));
+  border-radius: 9999px;
+  padding: 3px 9px;
+}
+.ps-group-ex-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 18px;
+  line-height: 1.15;
+  color: hsl(var(--foreground));
+}
+.ps-group-ex-target {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin-top: -4px;
+}
 .ps-set-inputs {
   display: flex;
   gap: 10px;
