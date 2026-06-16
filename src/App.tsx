@@ -3,6 +3,7 @@ import { useApp } from './lib/state'
 import { useAuth } from './lib/useAuth'
 import { fullSync, pushChanges } from './lib/sync'
 import { LoginScreen } from './screens/LoginScreen'
+import { IntroSlides } from './screens/IntroSlides'
 import { OnboardingScreen } from './screens/OnboardingScreen'
 import { PlanScreen } from './screens/PlanScreen'
 import { WorkoutScreen } from './screens/WorkoutScreen'
@@ -37,6 +38,12 @@ function App() {
   // Legal-Overlay (transient, nicht persistiert): aus dem Profil geöffnet,
   // rendert als Vollbild-Screen ohne BottomNav.
   const [legalPage, setLegalPage] = useState<LegalPage | null>(null)
+
+  // Intro-Slides nur beim allerersten App-Start (vor dem Login). Flag liegt
+  // in localStorage ("introSeen"); nach "Los geht's"/"Überspringen" gesetzt.
+  const [introSeen, setIntroSeen] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('introSeen') === 'true',
+  )
 
   // Pending-dirty-Flag (P3): true sobald lokale Änderungen anliegen, bleibt
   // gesetzt bis ein Push erfolgreich war. Als Ref gehalten — kein Render nötig
@@ -130,7 +137,11 @@ function App() {
 
   // Harter Login-Gate: ohne Session kein Zugriff.
   if (auth.loading) return <Splash />
-  if (!auth.session) return <LoginScreen sendOtp={auth.sendOtp} verifyOtp={auth.verifyOtp} />
+  if (!auth.session) {
+    // Allererster Start: Intro-Slides vor dem Login (danach nie wieder).
+    if (!introSeen) return <IntroSlides onDone={() => setIntroSeen(true)} />
+    return <LoginScreen sendOtp={auth.sendOtp} verifyOtp={auth.verifyOtp} />
+  }
 
   // Aktives Workout hat Vorrang und blendet die Bottom-Nav aus (Fokus beim Training).
   if (activeWorkout) return <WorkoutScreen />
