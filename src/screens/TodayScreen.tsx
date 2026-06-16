@@ -8,6 +8,8 @@
  */
 
 import { useApp } from '../lib/state';
+import { computeCoachGreeting } from '../lib/services/greetingService';
+import { CoachGreeting } from '../components/CoachGreeting';
 import type { PlannedSession } from '../shared/types';
 import './screens.css';
 
@@ -35,7 +37,8 @@ function fmtDate(iso: string): string {
 }
 
 export function TodayScreen() {
-  const { state, currentPlan, workoutHistory, startWorkout, setActiveTab } = useApp();
+  const { state, currentPlan, workoutHistory, startWorkout, setActiveTab, openCoachWithGreeting } =
+    useApp();
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('de-DE', {
@@ -59,6 +62,17 @@ export function TodayScreen() {
   else if (isDeload) sub = 'Heute lieber einen Gang zurück.';
   else sub = 'Du kannst heute gut trainieren.';
 
+  // Kontextabhängige Coach-Nachricht (nur mit aktivem Plan). Logik im Service.
+  const coachGreeting = fw
+    ? computeCoachGreeting({
+        displayName: state.profile?.displayName,
+        workouts: state.workouts,
+        todaySession,
+        coachActions: [...state.coachActions, ...(currentPlan?.actions ?? [])],
+        nowMs: today.getTime(),
+      })
+    : null;
+
   // Nächstes Training (für die Ruhetag-Karte).
   const nextSession = (() => {
     if (!curWeek) return null;
@@ -80,6 +94,14 @@ export function TodayScreen() {
         <div className="ps-today-date">{dateStr}</div>
         <div className="ps-today-greet">{greeting}</div>
         <p className="ps-today-sub">{sub}</p>
+
+        {/* Kontextabhängige Coach-Nachricht (Chat-Bubble) */}
+        {coachGreeting && (
+          <CoachGreeting
+            text={coachGreeting.text}
+            onReply={() => openCoachWithGreeting(coachGreeting.text)}
+          />
+        )}
 
         {/* Einheit des Tages */}
         {!fw ? (

@@ -170,6 +170,12 @@ interface AppContextValue {
   confirmChatMarker: (messageId: string, scope?: 'this_week' | 'permanent') => void;
   /** Verwirft die Marker einer Coach-Nachricht -> status 'rejected' (nicht angewendet). */
   rejectChatMarker: (messageId: string) => void;
+  /**
+   * Öffnet den Coach-Tab und seedet die übergebene Coach-Begrüßung als
+   * Coach-Nachricht in den Chat (als ob der Coach das gerade gesagt hätte),
+   * sodass die Antwort des Nutzers Kontext hat. Dedupe gegen Doppel-Seed.
+   */
+  openCoachWithGreeting: (text: string) => void;
 
   // --- Bottom-Nav ---
   /** Aktiver Tab. */
@@ -576,6 +582,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [updateChatMessageStatus],
   );
 
+  const openCoachWithGreeting = useCallback<AppContextValue['openCoachWithGreeting']>(
+    (text) => {
+      const content = text.trim();
+      update((prev) => {
+        const last = prev.chatMessages[prev.chatMessages.length - 1];
+        // Nicht doppelt seeden, wenn die letzte Nachricht schon dieselbe Begrüßung ist.
+        if (!content || (last?.role === 'coach' && last.content === content)) {
+          return { activeTab: 'coach' };
+        }
+        const now = new Date().toISOString();
+        const seeded: ChatMessage = {
+          id: uuidv4(),
+          role: 'coach',
+          content,
+          createdAt: now,
+          updatedAt: now,
+          status: 'sent',
+        };
+        return { chatMessages: [...prev.chatMessages, seeded], activeTab: 'coach' };
+      });
+    },
+    [update],
+  );
+
   const setActiveTab = useCallback<AppContextValue['setActiveTab']>(
     (tab) => {
       update(() => ({ activeTab: tab }));
@@ -616,6 +646,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sendChatMessage,
       confirmChatMarker,
       rejectChatMarker,
+      openCoachWithGreeting,
       activeTab: state.activeTab,
       setActiveTab,
     }),
@@ -644,6 +675,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sendChatMessage,
       confirmChatMarker,
       rejectChatMarker,
+      openCoachWithGreeting,
       setActiveTab,
     ],
   );

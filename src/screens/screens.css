@@ -2177,7 +2177,49 @@
 .ps-today-sub {
   font-size: 16px;
   color: hsl(var(--muted-foreground));
-  margin: 8px 0 28px;
+  margin: 8px 0 24px;
+}
+/* Coach-Begrüßung (dezente Chat-Bubble, oberhalb der Einheit) */
+.ps-coachgreet {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  background: hsl(var(--secondary) / 0.55);
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+}
+.ps-coachgreet-bar {
+  flex: 0 0 3px;
+  align-self: stretch;
+  border-radius: 9999px;
+  background: hsl(var(--foreground));
+}
+.ps-coachgreet-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ps-coachgreet-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: hsl(var(--foreground));
+}
+.ps-coachgreet-reply {
+  appearance: none;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 8px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+.ps-coachgreet-reply:hover {
+  color: hsl(var(--foreground));
 }
 .ps-today-card {
   background: hsl(var(--card));
