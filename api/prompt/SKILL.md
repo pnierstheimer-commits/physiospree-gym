@@ -137,13 +137,11 @@ Die Rep-Range ist die Leitplanke für die **Gewichtswahl:**
 
 | Segment | Rep-Range | RPE-Ziel | Versagensnähe |
 |---------|-----------|----------|---------------|
-| Hypertrophie | 8–15 | 8–10 | Ran ans Muskelversagen (RIR 0–1, level-/phasenabhängig) |
+| Hypertrophie | 8–15 | 9–10 | Ran ans Muskelversagen (RIR 0–1) |
 | Maximalkraft | 1–5 | 8–9 | Strain suchen, Misserfolg meiden |
 | Kraftausdauer | 15–25 | 8–9 | Metabolischer Stress, Technikerhalt priorisieren |
 
-**Beginner Wo 1–4:** maximal RPE 7 statt 8–10 (Technik lernen, dann ans Versagen).
-RPE-Rampe Hypertrophie nach Level — Wo 1–4 / 5–8 / 9–11: Beginner 7 / 8 / 9,
-Intermediate 8 / 9 / 9–10, Advanced 8 / 9 / 10. Deload (Wo 12) immer RPE 6.
+**Beginner Wo 1–4:** RPE 8 statt 9–10 (Technik lernen, dann ans Versagen).
 
 **Progressionsregel (alle Segmente):**
 ```
@@ -360,6 +358,7 @@ WOCHENPLAN — [Segment] | Block [X]: [Fokus] | Woche [X] von 12
 Split: [OK/UK/GK] | Level: [X] | Übungsstufe: [X]
 
 TAG 1 ([Wochentag]) — [Split-Tag: z.B. Oberkörper]
+0. Aufwärmen — 5–10 min Cardio (beliebiges Gerät) | Niedrige Intensität | Puls 120–130
 1. [Übung] — [Sätze] × [Rep-Range] @ [Last] kg | Pause [X]s | RPE-Ziel: [X] | Ran ans Versagen
    → [1 Satz Cue: z.B. "Schulterblätter zusammen, kontrolliert ablassen"]
 2. [Übung] — ...
@@ -391,6 +390,30 @@ Aufwärmsätze kommen hinzu, werden für Beginner angezeigt:
 - Satz 1: Leerstange oder 50 % Arbeitsgewicht, 10 Reps
 - Satz 2: 70 % Arbeitsgewicht, 5 Reps
 - Dann Arbeitssätze
+
+---
+
+## Aufwärm-Protokoll (vor jeder Einheit)
+
+**Jede Einheit beginnt mit 5–10 Minuten Cardio.** Gerät ist egal — Ergometer,
+Laufband, Crosstrainer, Ruderergometer, Stepper, was verfügbar ist. Kein
+Onboarding nötig, keine Geräteauswahl, keine Periodisierung.
+
+**Ziel:** Körpertemperatur erhöhen, Gelenke schmieren, Puls auf 120–130 bringen.
+Kein Schwitzen, kein Auspowern — Vorbereitung, nicht Training.
+
+**Im Plan als Punkt 0 vor der ersten Übung:**
+> 0. Aufwärmen — 5–10 min Cardio (beliebiges Gerät) | Niedrige Intensität | Puls 120–130
+
+**Danach die übungsspezifischen Aufwärmsätze** (50 %, 70 %) vor jeder
+Mehrgelenk-Übung — die stehen bereits im Plan.
+
+**Sound (TRAIN):**
+> "5 Minuten Ergometer oder Laufband. Nicht schnell, nur warm werden.
+> Puls auf 120, dann an die Geräte."
+
+**Nicht verhandelbar:** Auch bei Zeitdruck bleibt das Aufwärmen. Lieber eine
+Isolation am Ende streichen als das Aufwärmen weglassen.
 
 ---
 
