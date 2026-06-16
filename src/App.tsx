@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from './lib/state'
 import { useAuth } from './lib/useAuth'
 import { fullSync, pushChanges } from './lib/sync'
@@ -38,12 +38,40 @@ function App() {
   // rendert als Vollbild-Screen ohne BottomNav.
   const [legalPage, setLegalPage] = useState<LegalPage | null>(null)
 
-  // Verhindert mehrfaches Sync pro Login (syncedFor = bereits gesyncte userId).
+  // Pending-dirty-Flag (P3): true sobald lokale Änderungen anliegen, bleibt
+  // gesetzt bis ein Push erfolgreich war. Als Ref gehalten — kein Render nötig
+  // (React rät von setState-in-Effect / Ref-Mutation im Render ab).
+  const pendingPush = useRef(false)
+  // Immer aktueller State für Listener-Callbacks (ohne Re-Registrierung).
+  const stateRef = useRef(state)
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+  // Verhindert überlappende Syncs (Reconnect + Foreground gleichzeitig).
+  const syncing = useRef(false)
+  // Genau ein Login-/App-Start-Sync pro userId.
   const syncedFor = useRef<string | null>(null)
 
-  // Nach Login: einmalig fullSync (push lokal, pull server, merge). Normalfall
-  // hinter dem Gate = leerer localStorage -> es werden die Server-Daten geladen.
-  // `state` in den Deps, aber der Guard sorgt für genau einen Sync-Durchlauf.
+  // Voller Sync: pull -> merge (LWW) -> push(merged, guarded) — siehe sync.ts.
+  // Aktualisiert den lokalen State und löscht das Pending-Flag bei Erfolg.
+  const runFullSync = useCallback(
+    async (uid: string) => {
+      if (syncing.current) return
+      syncing.current = true
+      try {
+        const res = await fullSync(uid, stateRef.current)
+        if (res.state) replaceState(res.state)
+        if (res.ok) pendingPush.current = false
+      } catch {
+        /* offline-tolerant (Regel 9): lokal weiterarbeiten */
+      } finally {
+        syncing.current = false
+      }
+    },
+    [replaceState],
+  )
+
+  // Nach Login (oder App-Start mit Session): genau einmal voll synchronisieren.
   useEffect(() => {
     if (!userId) {
       syncedFor.current = null
@@ -51,23 +79,39 @@ function App() {
     }
     if (syncedFor.current === userId) return
     syncedFor.current = userId
-    void fullSync(userId, state)
-      .then((res) => {
-        if (res.state) replaceState(res.state)
-      })
-      .catch(() => {
-        /* offline-tolerant (Regel 9): lokal weiterarbeiten */
-      })
-  }, [userId, state, replaceState])
+    void runFullSync(userId)
+  }, [userId, runFullSync])
 
-  // Debounced push bei jeder State-Änderung (nur eingeloggt, non-blocking).
+  // Debounced Push bei jeder State-Änderung (guarded -> kein Clobber, P1).
+  // Setzt das Pending-Flag; löscht es erst nach erfolgreichem Push (P3).
   useEffect(() => {
     if (!userId) return
+    pendingPush.current = true
     const t = setTimeout(() => {
-      void pushChanges(userId, state).catch(() => {})
+      void pushChanges(userId, state)
+        .then((res) => {
+          if (res.ok) pendingPush.current = false
+        })
+        .catch(() => {})
     }, 1500)
     return () => clearTimeout(t)
   }, [userId, state])
+
+  // P3: Reconnect (online) + Rückkehr in den Vordergrund (visibilitychange,
+  // wichtig für die PWA auf dem iPhone) -> voller Sync (pull-merge-push).
+  useEffect(() => {
+    if (!userId) return
+    const onOnline = () => void runFullSync(userId)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void runFullSync(userId)
+    }
+    window.addEventListener('online', onOnline)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [userId, runFullSync])
 
   // Logout: abmelden, lokalen State leeren -> Gate routet zurück zum Login.
   const handleSignOut = () => {

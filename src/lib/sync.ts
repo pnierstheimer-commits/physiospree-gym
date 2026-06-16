@@ -426,8 +426,60 @@ function collectActions(state: PersistedState): CoachAction[] {
 }
 
 // ---------------------------------------------------------------------------
-// Push
+// Push (mit updatedAt-Guard, P1: schreibt nur Zeilen, die lokal echt neuer sind)
 // ---------------------------------------------------------------------------
+
+/** True, wenn ISO-Zeitstempel a echt neuer ist als b. Numerisch (Date.parse),
+ *  robust gegen Formatunterschiede (lokal `…Z` vs. Postgres `…+00:00`). */
+function isNewerTs(a: unknown, b: unknown): boolean {
+  const av = Date.parse(String(a));
+  const bv = Date.parse(String(b));
+  if (Number.isNaN(av)) return false; // unbrauchbarer lokaler Stempel -> nicht schreiben
+  if (Number.isNaN(bv)) return true; // Server-Stempel unlesbar -> lokal gewinnt
+  return av > bv;
+}
+
+type SupabaseClientNN = NonNullable<ReturnType<typeof getSupabase>>;
+
+/**
+ * Upsert mit Last-Write-Wins-Guard: liest die Server-`updated_at` der
+ * betroffenen Keys und schreibt nur Zeilen, die auf dem Server fehlen oder
+ * lokal ECHT neuer sind. Verhindert, dass ein veralteter Client neuere
+ * Serverdaten überschreibt (Clobber-Bug, P1).
+ */
+async function upsertNewer(
+  supabase: SupabaseClientNN,
+  table: string,
+  rows: Row[],
+  keyCol: string,
+  onConflict?: string,
+): Promise<{ error?: string; pushed: number }> {
+  if (rows.length === 0) return { pushed: 0 };
+
+  const keys = rows.map((r) => r[keyCol]).filter((k) => k != null) as (string | number)[];
+  const { data, error: selErr } = await supabase
+    .from(table)
+    .select(`${keyCol}, updated_at`)
+    .in(keyCol, keys);
+  if (selErr) return { error: `${table} (read): ${selErr.message}`, pushed: 0 };
+
+  const serverTs = new Map<string, unknown>();
+  for (const row of (data as unknown as Row[] | null) ?? [])
+    serverTs.set(String(row[keyCol]), row.updated_at);
+
+  const toWrite = rows.filter((r) => {
+    const key = String(r[keyCol]);
+    if (!serverTs.has(key)) return true; // nicht auf Server -> insert
+    return isNewerTs(r.updated_at, serverTs.get(key)); // nur wenn lokal echt neuer
+  });
+  if (toWrite.length === 0) return { pushed: 0 };
+
+  const { error } = await supabase
+    .from(table)
+    .upsert(toWrite, onConflict ? { onConflict } : undefined);
+  if (error) return { error: `${table}: ${error.message}`, pushed: 0 };
+  return { pushed: toWrite.length };
+}
 
 export async function pushChanges(userId: string, state: PersistedState): Promise<SyncResult> {
   const now = new Date().toISOString();
@@ -437,50 +489,52 @@ export async function pushChanges(userId: string, state: PersistedState): Promis
   let pushed = 0;
   const fail = (error: string): SyncResult => ({ ok: false, pushed, pulled: 0, syncedAt: now, error });
 
-  const upsert = async (table: string, rows: Row[], onConflict?: string): Promise<string | null> => {
-    if (rows.length === 0) return null;
-    const { error } = await supabase
-      .from(table)
-      .upsert(rows, onConflict ? { onConflict } : undefined);
-    if (error) return `${table}: ${error.message}`;
-    pushed += rows.length;
+  const push = async (
+    table: string,
+    rows: Row[],
+    keyCol = 'id',
+    onConflict?: string,
+  ): Promise<string | null> => {
+    const res = await upsertNewer(supabase, table, rows, keyCol, onConflict);
+    if (res.error) return res.error;
+    pushed += res.pushed;
     return null;
   };
 
   if (state.profile) {
-    const e = await upsert('gym_user_profiles', [profileToRow(state.profile, userId)], 'user_id');
+    const e = await push('gym_user_profiles', [profileToRow(state.profile, userId)], 'user_id', 'user_id');
     if (e) return fail(e);
   }
 
   const frameworks = collectFrameworks(state);
-  let e = await upsert('gym_plan_frameworks', frameworks.map((f) => frameworkToRow(f, userId)));
+  let e = await push('gym_plan_frameworks', frameworks.map((f) => frameworkToRow(f, userId)));
   if (e) return fail(e);
-  e = await upsert(
+  e = await push(
     'gym_plan_weeks',
     frameworks.flatMap((f) => f.weeks.map((w) => weekToRow(w, f.id, userId))),
   );
   if (e) return fail(e);
 
-  e = await upsert('gym_workouts', state.workouts.map((w) => workoutToRow(w, userId)));
+  e = await push('gym_workouts', state.workouts.map((w) => workoutToRow(w, userId)));
   if (e) return fail(e);
-  e = await upsert(
+  e = await push(
     'gym_workout_exercises',
     state.workouts.flatMap((w) => w.exercises.map((ex) => exerciseToRow(ex, userId))),
   );
   if (e) return fail(e);
-  e = await upsert(
+  e = await push(
     'gym_workout_sets',
     state.workouts.flatMap((w) => w.exercises.flatMap((ex) => ex.sets.map((s) => setToRow(s, userId)))),
   );
   if (e) return fail(e);
 
-  e = await upsert('gym_checkins', state.checkins.map((c) => checkinToRow(c, userId)));
+  e = await push('gym_checkins', state.checkins.map((c) => checkinToRow(c, userId)));
   if (e) return fail(e);
 
-  e = await upsert('gym_coach_actions', collectActions(state).map((a) => actionToRow(a, userId)));
+  e = await push('gym_coach_actions', collectActions(state).map((a) => actionToRow(a, userId)));
   if (e) return fail(e);
 
-  e = await upsert('gym_chat_messages', state.chatMessages.map((c) => chatToRow(c, userId)));
+  e = await push('gym_chat_messages', state.chatMessages.map((c) => chatToRow(c, userId)));
   if (e) return fail(e);
 
   return { ok: true, pushed, pulled: 0, syncedAt: now };
@@ -612,9 +666,8 @@ export async function fullSync(userId: string, localState: PersistedState): Prom
     return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: 'offline', state: localState };
   }
 
-  const pushRes = await pushChanges(userId, localState);
-  if (!pushRes.ok) return { ...pushRes, state: localState };
-
+  // Reihenfolge (P1): pull -> merge (LWW) -> push(merged, guarded). So wird nie
+  // ein veralteter lokaler Stand über neuere Serverdaten geschrieben.
   const server = await pullChanges(userId);
   const merged = mergeStates(localState, server);
   const pulled =
@@ -624,5 +677,11 @@ export async function fullSync(userId: string, localState: PersistedState): Prom
     server.coachActions.length +
     (server.profile ? 1 : 0);
 
+  const pushRes = await pushChanges(userId, merged);
+  if (!pushRes.ok) {
+    // Push fehlgeschlagen (z. B. offline mitten im Sync): gemergten Stand
+    // trotzdem ans UI geben, aber als nicht-ok markieren.
+    return { ok: false, pushed: 0, pulled, syncedAt: now, error: pushRes.error, state: merged };
+  }
   return { ok: true, pushed: pushRes.pushed, pulled, syncedAt: now, state: merged };
 }
