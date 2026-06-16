@@ -27,6 +27,8 @@ import {
   parsePrefix,
   type ExerciseGroup,
 } from '../lib/services/exerciseGroupService';
+import { isCalibrationSession } from '../lib/services/planMeta';
+import { ExerciseInfo } from '../components/ExerciseInfo';
 import type { Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
 import './screens.css';
 
@@ -218,7 +220,11 @@ export function WorkoutScreen() {
   const groups = groupExercises(exViews.map((e) => e.label));
   const groupIdx = Math.min(groupIndex, groups.length - 1);
   const group = groups[groupIdx];
-  const isCalibration = /kalibr/i.test(activeWorkout.name);
+  // Kalibrierung robust über das type-Feld (Fallback: Name/erste Einheit).
+  const isCalibration =
+    planned && currentPlan
+      ? isCalibrationSession(currentPlan.framework, planned)
+      : /kalibr/i.test(activeWorkout.name);
 
   const roundsOf = (g: ExerciseGroup): number => Math.max(1, exViews[g.indices[0]].targetSets);
   const pairRestOf = (g: ExerciseGroup): number => exViews[g.indices[0]].restSeconds;
@@ -562,7 +568,7 @@ export function WorkoutScreen() {
             const ev = exViews[group.indices[0]];
             return (
               <>
-                <div className="ps-ex-focus-name">{ev.name}</div>
+                <ExerciseInfo name={ev.name} nameClass="ps-ex-focus-name" />
                 <div className="ps-target">{targetText(ev)}</div>
                 {ev.cue && <p className="ps-ex-cue ps-target-cue">{ev.cue}</p>}
 
@@ -624,14 +630,17 @@ export function WorkoutScreen() {
                   key={gev.we.id}
                   className={`ps-group-ex${isActive ? ' is-active' : ''}${isWaiting ? ' is-waiting' : ''}${done ? ' is-done' : ''}`}
                 >
-                  <div className="ps-group-ex-head">
-                    <span className="ps-group-ex-badge">
-                      {group.label}
-                      {p + 1}
-                    </span>
-                    <span className="ps-group-ex-name">{gev.name}</span>
-                    {done && <span className="ps-set-check">✓</span>}
-                  </div>
+                  <ExerciseInfo
+                    name={gev.name}
+                    nameClass="ps-group-ex-name"
+                    badge={
+                      <span className="ps-group-ex-badge">
+                        {group.label}
+                        {p + 1}
+                      </span>
+                    }
+                    trailing={done ? <span className="ps-set-check">✓</span> : null}
+                  />
                   <div className="ps-group-ex-target">{targetText(gev)}</div>
                   <div className="ps-set-inputs">
                     <label className="ps-field">

@@ -53,6 +53,9 @@ export type WeekDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 /** Verlauf/Status einer Trainingseinheit oder eines Workouts. */
 export type SessionStatus = 'planned' | 'in_progress' | 'completed' | 'skipped';
 
+/** Art einer geplanten Einheit. 'calibration' = Startgewichte finden (Wo1/E1). */
+export type SessionType = 'calibration' | 'regular';
+
 // ---------------------------------------------------------------------------
 // Nutzerprofil
 // ---------------------------------------------------------------------------
@@ -139,6 +142,12 @@ export interface PlannedSession extends Syncable {
   /** 0-basierter Tag innerhalb der Woche. */
   dayIndex: number;
   name: string;
+  /**
+   * Art der Einheit. Optional/abwärtskompatibel: fehlt der Wert, gilt 'regular'
+   * (alte Pläne erkennt die UI per Fallback: Name enthält "Kalibrierung" ODER
+   * erste Einheit der ersten Woche). Lebt im sessions-JSONB — keine Migration.
+   */
+  type?: SessionType;
   /** Fokus-Muskelgruppen dieser Einheit (z. B. Push/Pull/Legs). */
   focus: MuscleGroup[];
   /**

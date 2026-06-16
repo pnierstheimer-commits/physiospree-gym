@@ -65,12 +65,16 @@ interface DayRowProps {
   sessions: PlannedSession[];
   selectedId: string | null;
   onSelect: (s: PlannedSession) => void;
+  date: string | null;
 }
-function DayRow({ day, sessions, selectedId, onSelect }: DayRowProps) {
+function DayRow({ day, sessions, selectedId, onSelect, date }: DayRowProps) {
   const { setNodeRef, isOver } = useDroppable({ id: DAY_PREFIX + day });
   return (
     <div className="ps-dp-day">
-      <span className="ps-dp-day-label">{WEEKDAY_LABELS[day]}</span>
+      <span className="ps-dp-day-label">
+        {WEEKDAY_LABELS[day]}
+        {date && <span className="ps-dp-day-date">{date}</span>}
+      </span>
       <div ref={setNodeRef} className={`ps-dp-day-slot${isOver ? ' is-over' : ''}`}>
         {sessions.length === 0 ? (
           <span className="ps-dp-empty" aria-hidden="true">
@@ -96,6 +100,8 @@ interface WeekDayPlannerProps {
   onReorder: (sessions: PlannedSession[]) => void;
   selectedSessionId?: string | null;
   onSelectSession?: (s: PlannedSession) => void;
+  /** Optionales absolutes Datum je Wochentag ("16.6."). null = kein Datum. */
+  dateForDay?: (day: WeekDay) => string | null;
 }
 
 export function WeekDayPlanner({
@@ -103,6 +109,7 @@ export function WeekDayPlanner({
   onReorder,
   selectedSessionId = null,
   onSelectSession,
+  dateForDay,
 }: WeekDayPlannerProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -153,6 +160,7 @@ export function WeekDayPlanner({
             sessions={byDay(day)}
             selectedId={selectedSessionId}
             onSelect={(s) => onSelectSession?.(s)}
+            date={dateForDay ? dateForDay(day) : null}
           />
         ))}
       </div>

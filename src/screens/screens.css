@@ -591,6 +591,108 @@
   color: hsl(var(--muted-foreground));
 }
 
+/* Absolutes Session-Datum (Plan-Detail) */
+.ps-day-date {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin-top: -4px;
+}
+
+/* --- Tappbarer Übungsname + Info-Panel (ExerciseInfo) --- */
+.ps-exname-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.ps-exname {
+  /* Button-Reset, damit der Name wie zuvor aussieht */
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+.ps-exname.is-static {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ps-exname-info {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+}
+.ps-exname[aria-expanded='true'] .ps-exname-info {
+  color: hsl(var(--foreground));
+}
+/* Slide-Panel (max-height-Transition, iOS-Safari-sicher) */
+.ps-exinfo {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 220ms ease;
+}
+.ps-exinfo.is-open {
+  max-height: 260px;
+}
+.ps-exinfo-inner {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: hsl(var(--secondary) / 0.5);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ps-exinfo-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: hsl(var(--foreground));
+}
+.ps-exinfo-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ps-exinfo-tag {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  padding: 2px 8px;
+}
+.ps-exinfo-cue {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+
 /* Leerer Zustand */
 .ps-empty {
   font-size: 14px;
@@ -1360,14 +1462,22 @@
   gap: 10px;
 }
 .ps-dp-day-label {
-  flex: 0 0 30px;
+  flex: 0 0 46px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
   padding-top: 2px;
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
+}
+.ps-dp-day-date {
+  font-family: var(--font-sans, inherit);
+  font-size: 11px;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground) / 0.75);
+  letter-spacing: 0.01em;
 }
 .ps-dp-day-slot {
   flex: 1 1 auto;

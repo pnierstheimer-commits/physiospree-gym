@@ -363,6 +363,9 @@ function mapDetailWeeks(
         weekId,
         dayIndex: s.dayIndex,
         name,
+        // Robustes Typ-Feld (statt nur Name-String). Name behält den
+        // "Kalibrierung — "-Prefix für Abwärtskompatibilität der Coach-Auswertung.
+        type: s.isCalibration ? ('calibration' as const) : ('regular' as const),
         focus: toFocus(s.focus),
         exercises,
         workoutId: null,

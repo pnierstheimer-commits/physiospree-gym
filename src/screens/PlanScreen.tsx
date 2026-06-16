@@ -18,6 +18,15 @@ import { requestNextWindow, shouldGenerateNextWindow } from '../lib/services/win
 import { needsScheduling } from '../lib/services/scheduleService';
 import { WeekRoadmap } from '../components/WeekRoadmap';
 import { WeekDayPlanner } from '../components/WeekDayPlanner';
+import { ExerciseInfo } from '../components/ExerciseInfo';
+import {
+  formatSessionDate,
+  formatShortDate,
+  formatWeekRange,
+  isCalibrationSession,
+  sessionDate,
+  weekDateRange,
+} from '../lib/services/planMeta';
 import type { BlockPhase, CoachAction, Goal, PlannedExercise, PlannedSession } from '../shared/types';
 import './screens.css';
 
@@ -62,19 +71,18 @@ function formatSpec(ex: PlannedExercise): string {
   return [head, `Pause ${ex.restSeconds}s`, `RPE ${ex.targetRPE}`].join(' · ');
 }
 
-function isCalibration(name: string): boolean {
-  return /kalibr/i.test(name);
-}
-
 /** Detailansicht einer angetippten Einheit (Übungen + Training starten). */
 function SessionDetail({
   session,
+  calib,
+  date,
   onStart,
 }: {
   session: PlannedSession;
+  calib: boolean;
+  date: string | null;
   onStart: (s: PlannedSession) => void;
 }) {
-  const calib = isCalibration(session.name);
   const exercises = [...session.exercises].sort((a, b) => a.order - b.order);
   return (
     <div className={`ps-day ps-day-detail${calib ? ' is-calibration' : ''}`}>
@@ -82,12 +90,13 @@ function SessionDetail({
         <span className="ps-day-title">{session.name}</span>
         {calib && <span className="ps-pill ps-pill-yellow">Kalibrierung</span>}
       </div>
+      {date && <div className="ps-day-date">{date}</div>}
       <div className="ps-exlist">
         {exercises.map((ex) => {
           const { name, cue } = splitExercise(ex.notes);
           return (
             <div key={ex.id} className="ps-ex">
-              <span className="ps-ex-name">{name}</span>
+              <ExerciseInfo name={name} nameClass="ps-ex-name" />
               <span className="ps-ex-spec">{formatSpec(ex)}</span>
               {cue && <span className="ps-ex-cue">{cue}</span>}
             </div>
@@ -224,7 +233,12 @@ export function PlanScreen() {
         {selectedWeekObj ? (
           <>
             <div className="ps-section-label">
-              Woche {selectedWeekObj.weekIndex + 1} — Tagesplanung
+              {(() => {
+                const range = weekDateRange(fw, selectedWeekObj.weekIndex);
+                return `Woche ${selectedWeekObj.weekIndex + 1}${
+                  range ? ` — ${formatWeekRange(range)}` : ' — Tagesplanung'
+                }`;
+              })()}
               {selectedWeekObj.isDeload && (
                 <span className="ps-pill ps-pill-yellow ps-section-pill">Deload</span>
               )}
@@ -238,9 +252,21 @@ export function PlanScreen() {
                   onReorder={(sessions) => updateWeekSessions(selectedWeekObj.id, sessions)}
                   selectedSessionId={selectedSessionId}
                   onSelectSession={onSelectSession}
+                  dateForDay={(day) => {
+                    const d = sessionDate(fw, selectedWeekObj.weekIndex, day);
+                    return d ? formatShortDate(d) : null;
+                  }}
                 />
                 {selectedSession ? (
-                  <SessionDetail session={selectedSession} onStart={startWorkout} />
+                  <SessionDetail
+                    session={selectedSession}
+                    calib={isCalibrationSession(fw, selectedSession)}
+                    date={(() => {
+                      const d = sessionDate(fw, selectedWeekObj.weekIndex, selectedSession.scheduledDay);
+                      return d ? formatSessionDate(d) : null;
+                    })()}
+                    onStart={startWorkout}
+                  />
                 ) : (
                   <div className="ps-day-hint">Tippe eine Einheit für Details &amp; Start.</div>
                 )}
