@@ -14,7 +14,13 @@
  * `targetReps`, Name/Cue = `notes` ("Name — cue").
  */
 
-import type { ParsedMarker, PlanFramework, PlannedSession, PlanWeek } from '../../shared/types';
+import type {
+  BlockPhase,
+  ParsedMarker,
+  PlanFramework,
+  PlannedSession,
+  PlanWeek,
+} from '../../shared/types';
 
 // ---------------------------------------------------------------------------
 // Kleine Helfer
@@ -24,11 +30,38 @@ const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
 const asNum = (v: unknown, fallback: number): number =>
   typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Übungsname aus notes ("Name — cue"). */
 function exName(notes: string | undefined): string {
   if (!notes) return '';
   const i = notes.indexOf(' — ');
   return i === -1 ? notes : notes.slice(0, i);
+}
+
+/** Cue aus notes ("Name — cue") — leer, wenn keiner. */
+function exCue(notes: string | undefined): string {
+  if (!notes) return '';
+  const i = notes.indexOf(' — ');
+  return i === -1 ? '' : notes.slice(i + 3);
+}
+
+/** Block-/Phasen-Name (DE/EN/Key) -> BlockPhase. null wenn nicht auflösbar. */
+function toPhase(v: unknown): BlockPhase | null {
+  const s = asStr(v).toLowerCase();
+  if (!s) return null;
+  if (s.includes('akkumul') || s.includes('accumul')) return 'accumulation';
+  if (s.includes('intensiv') || s.includes('intensif')) return 'intensification';
+  if (s.includes('realis') || s.includes('peak')) return 'peak';
+  if (s.includes('deload') || s.includes('entlad') || s.includes('entlast')) return 'deload';
+  return null;
+}
+
+/** Volumen-Delta aus "+1_set_per_exercise" / "-1_set_per_exercise" o. ä. */
+function parseVolumeDelta(v: unknown): number | null {
+  const s = asStr(v).toLowerCase();
+  const m = /([+-]?\d+)\s*_?\s*set/.exec(s);
+  return m ? Number(m[1]) : null;
 }
 
 /** [min,max]-Rep-Range aus unbekanntem Payload-Wert. */
@@ -37,6 +70,14 @@ function asRepRange(v: unknown): [number, number] | null {
     return [v[0], v[1]];
   }
   return null;
+}
+
+/** Rep-Range aus Array [min,max] ODER String "3-6"/"3–6". */
+function parseRepRange(v: unknown): [number, number] | null {
+  const arr = asRepRange(v);
+  if (arr) return arr;
+  const m = /(\d+)\s*[-–]\s*(\d+)/.exec(asStr(v));
+  return m ? [Number(m[1]), Number(m[2])] : null;
 }
 
 /** notes-Feld aus Name + optionalem Cue ("Name — cue"). */
@@ -230,6 +271,128 @@ function exerciseSwap(
 }
 
 // ---------------------------------------------------------------------------
+// EXERCISE_UPGRADE — Übung auf eine schwerere Stufe hochstufen
+// payload: { exerciseId?, exerciseName, newExerciseId?, newName?, newCue?,
+//            newLevel?, reason }
+// Match über den alten Übungsnamen (Platzhalter-IDs); neuer Name aus
+// newName/newExerciseName oder newExerciseId (falls keine UUID). Neue Bewegung
+// -> Last auf 80 % (2,5-kg-Raster), Reps/Sätze/RPE bleiben. Immer permanent
+// (ab currentWeekIndex über alle verbleibenden Wochen).
+// ---------------------------------------------------------------------------
+
+function exerciseUpgrade(
+  weeks: PlanWeek[],
+  framework: PlanFramework,
+  marker: ParsedMarker,
+  now: string,
+): PlanWeek[] {
+  const oldId = asStr(marker.payload.exerciseId);
+  const oldName = asStr(marker.payload.exerciseName) || asStr(marker.payload.oldName);
+  const newId = asStr(marker.payload.newExerciseId);
+  const newName =
+    asStr(marker.payload.newName) ||
+    asStr(marker.payload.newExerciseName) ||
+    (newId && !UUID_RE.test(newId) ? newId : '');
+  if (!newName) return weeks; // ohne neuen Namen nichts zu tun
+  if (!oldName && !oldId) return weeks; // ohne Match-Kriterium nichts zu tun
+
+  const newCue = asStr(marker.payload.newCue);
+  const cur = framework.currentWeekIndex;
+  const matches = (peId: string, notes: string | undefined): boolean =>
+    (!!oldId && peId === oldId) || (!!oldName && exName(notes) === oldName);
+
+  return mapWeeks(
+    weeks,
+    (w) => w.weekIndex >= cur, // immer permanent
+    (w) => ({
+      ...w,
+      sessions: w.sessions.map((s) => ({
+        ...s,
+        exercises: s.exercises.map((pe) => {
+          if (!matches(pe.exerciseId, pe.notes)) return pe;
+          const cue = newCue || exCue(pe.notes);
+          return {
+            ...pe,
+            // Nur eine echte UUID als neue exerciseId übernehmen, sonst behalten.
+            exerciseId: UUID_RE.test(newId) ? newId : pe.exerciseId,
+            notes: buildNotes(newName, cue),
+            suggestedLoadKg:
+              typeof pe.suggestedLoadKg === 'number'
+                ? round25(pe.suggestedLoadKg * 0.8)
+                : pe.suggestedLoadKg,
+            // Rep-Range, Sätze, RPE-Ziel bleiben.
+            updatedAt: now,
+          };
+        }),
+      })),
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PHASE_SHIFT — Blockphase verschieben (+ ggf. Parameter des neuen Blocks)
+// payload: { fromBlock?, toBlock, changes?: { volumeChange?, rpeTarget?,
+//            restSeconds?, repRange? } }
+// Zielwochen: verbleibende Wochen (>= currentWeekIndex), die zum alten Block
+// gehören (Fallback: alle verbleibenden, wenn fromBlock nicht auflösbar). Phase
+// auf den neuen Block setzen; bei vorhandenen changes auch die Übungsparameter.
+// Leere/unklare changes -> nur die Phase aktualisieren.
+// ---------------------------------------------------------------------------
+
+function phaseShift(
+  weeks: PlanWeek[],
+  framework: PlanFramework,
+  marker: ParsedMarker,
+  now: string,
+): PlanWeek[] {
+  const fromPhase = toPhase(marker.payload.fromBlock);
+  const toP = toPhase(marker.payload.toBlock);
+  const changes =
+    typeof marker.payload.changes === 'object' && marker.payload.changes !== null
+      ? (marker.payload.changes as Record<string, unknown>)
+      : {};
+
+  const cur = framework.currentWeekIndex;
+  const volDelta = parseVolumeDelta(changes.volumeChange);
+  const rpeTarget = typeof changes.rpeTarget === 'number' ? changes.rpeTarget : null;
+  const restSeconds = typeof changes.restSeconds === 'number' ? changes.restSeconds : null;
+  const repRange = parseRepRange(changes.repRange);
+  const hasChanges = volDelta != null || rpeTarget != null || restSeconds != null || !!repRange;
+
+  // Verbleibende Wochen des alten Blocks (oder alle verbleibenden als Fallback).
+  const inTarget = (w: PlanWeek): boolean =>
+    w.weekIndex >= cur && (fromPhase ? w.phase === fromPhase : true);
+
+  if (!toP && !hasChanges) return weeks; // nichts auflösbar -> No-op (wird trotzdem protokolliert)
+
+  return weeks.map((w) => {
+    if (!inTarget(w)) return w;
+    const base: PlanWeek = {
+      ...w,
+      phase: toP ?? w.phase,
+      isDeload: toP ? toP === 'deload' : w.isDeload,
+      updatedAt: now,
+    };
+    if (!hasChanges) return base; // nur Phase aktualisieren
+    return {
+      ...base,
+      sessions: w.sessions.map((s) => ({
+        ...s,
+        updatedAt: now,
+        exercises: s.exercises.map((pe) => ({
+          ...pe,
+          targetSets: volDelta != null ? Math.max(2, pe.targetSets + volDelta) : pe.targetSets,
+          targetRPE: rpeTarget != null ? rpeTarget : pe.targetRPE,
+          restSeconds: restSeconds != null ? restSeconds : pe.restSeconds,
+          targetReps: repRange ?? pe.targetReps,
+          updatedAt: now,
+        })),
+      })),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Last-Rampe (geteilt von ILLNESS_RECOVERY und VACATION_MODE)
 // Senkt die Last ab `fromWeek` und steigt linear über `rampWeeks` Wochen
 // zurück auf 100% (Wo0: returnLoad … Wo[rampWeeks]: 100%). 2,5-kg-Raster.
@@ -353,8 +516,8 @@ function vacationMode(
 
 /**
  * Wendet EINEN Marker auf die Wochen an und gibt die (ggf. neuen) Wochen zurück.
- * Unbekannte/nicht-transformierende Kinds (EXERCISE_UPGRADE, PHASE_SHIFT) sind
- * No-ops — der Marker wird vom Aufrufer trotzdem protokolliert.
+ * Unbekannte Kinds sind No-ops — der Marker wird vom Aufrufer trotzdem
+ * protokolliert.
  */
 export function applyMarkerToWeeks(
   weeks: PlanWeek[],
@@ -371,6 +534,10 @@ export function applyMarkerToWeeks(
       return sessionAdjustment(weeks, framework, marker, now);
     case 'EXERCISE_SWAP':
       return exerciseSwap(weeks, framework, marker, now);
+    case 'EXERCISE_UPGRADE':
+      return exerciseUpgrade(weeks, framework, marker, now);
+    case 'PHASE_SHIFT':
+      return phaseShift(weeks, framework, marker, now);
     case 'ILLNESS_RECOVERY':
       return illnessRecovery(weeks, framework, marker, now);
     case 'VACATION_MODE':
