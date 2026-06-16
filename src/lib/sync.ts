@@ -481,10 +481,22 @@ async function upsertNewer(
   return { pushed: toWrite.length };
 }
 
-export async function pushChanges(userId: string, state: PersistedState): Promise<SyncResult> {
+/**
+ * @param since  P2 (Delta-Push): wenn gesetzt, werden NUR Entitäten mit
+ *   updatedAt > since gesendet. `null` (Default) = alles pushen (für fullSync).
+ */
+export async function pushChanges(
+  userId: string,
+  state: PersistedState,
+  since: string | null = null,
+): Promise<SyncResult> {
   const now = new Date().toISOString();
   const supabase = getSupabase();
   if (!supabase) return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: 'offline' };
+
+  // Delta-Filter: bei gesetztem `since` nur echt-neuere Entitäten.
+  const after = <T extends { updatedAt: string }>(items: T[]): T[] =>
+    since == null ? items : items.filter((it) => isNewerTs(it.updatedAt, since));
 
   let pushed = 0;
   const fail = (error: string): SyncResult => ({ ok: false, pushed, pulled: 0, syncedAt: now, error });
@@ -501,40 +513,42 @@ export async function pushChanges(userId: string, state: PersistedState): Promis
     return null;
   };
 
-  if (state.profile) {
+  if (state.profile && (since == null || isNewerTs(state.profile.updatedAt, since))) {
     const e = await push('gym_user_profiles', [profileToRow(state.profile, userId)], 'user_id', 'user_id');
     if (e) return fail(e);
   }
 
   const frameworks = collectFrameworks(state);
-  let e = await push('gym_plan_frameworks', frameworks.map((f) => frameworkToRow(f, userId)));
+  let e = await push('gym_plan_frameworks', after(frameworks).map((f) => frameworkToRow(f, userId)));
   if (e) return fail(e);
-  e = await push(
-    'gym_plan_weeks',
-    frameworks.flatMap((f) => f.weeks.map((w) => weekToRow(w, f.id, userId))),
-  );
+  // Wochen aus ALLEN Frameworks, nach updatedAt gefiltert (FK-Eltern sind, falls
+  // neu, ebenfalls neuer-als-since und damit oben enthalten).
+  const weekPairs = frameworks.flatMap((f) => f.weeks.map((w) => ({ w, fwId: f.id })));
+  const freshWeeks =
+    since == null ? weekPairs : weekPairs.filter((p) => isNewerTs(p.w.updatedAt, since));
+  e = await push('gym_plan_weeks', freshWeeks.map((p) => weekToRow(p.w, p.fwId, userId)));
   if (e) return fail(e);
 
-  e = await push('gym_workouts', state.workouts.map((w) => workoutToRow(w, userId)));
+  e = await push('gym_workouts', after(state.workouts).map((w) => workoutToRow(w, userId)));
   if (e) return fail(e);
   e = await push(
     'gym_workout_exercises',
-    state.workouts.flatMap((w) => w.exercises.map((ex) => exerciseToRow(ex, userId))),
+    after(state.workouts.flatMap((w) => w.exercises)).map((ex) => exerciseToRow(ex, userId)),
   );
   if (e) return fail(e);
   e = await push(
     'gym_workout_sets',
-    state.workouts.flatMap((w) => w.exercises.flatMap((ex) => ex.sets.map((s) => setToRow(s, userId)))),
+    after(state.workouts.flatMap((w) => w.exercises.flatMap((ex) => ex.sets))).map((s) => setToRow(s, userId)),
   );
   if (e) return fail(e);
 
-  e = await push('gym_checkins', state.checkins.map((c) => checkinToRow(c, userId)));
+  e = await push('gym_checkins', after(state.checkins).map((c) => checkinToRow(c, userId)));
   if (e) return fail(e);
 
-  e = await push('gym_coach_actions', collectActions(state).map((a) => actionToRow(a, userId)));
+  e = await push('gym_coach_actions', after(collectActions(state)).map((a) => actionToRow(a, userId)));
   if (e) return fail(e);
 
-  e = await push('gym_chat_messages', state.chatMessages.map((c) => chatToRow(c, userId)));
+  e = await push('gym_chat_messages', after(state.chatMessages).map((c) => chatToRow(c, userId)));
   if (e) return fail(e);
 
   return { ok: true, pushed, pulled: 0, syncedAt: now };
@@ -684,4 +698,43 @@ export async function fullSync(userId: string, localState: PersistedState): Prom
     return { ok: false, pushed: 0, pulled, syncedAt: now, error: pushRes.error, state: merged };
   }
   return { ok: true, pushed: pushRes.pushed, pulled, syncedAt: now, state: merged };
+}
+
+// ---------------------------------------------------------------------------
+// Plan-Reset (P4): serverseitige Plan-Daten löschen, damit andere Geräte den
+// Plan nicht wieder runterziehen. NUR Plan (Workouts bleiben erhalten).
+// ---------------------------------------------------------------------------
+
+/**
+ * Löscht alle Plan-Rows des eingeloggten Nutzers auf dem Server — FK-sicher:
+ * Kinder (gym_plan_weeks) vor Eltern (gym_plan_frameworks). Workouts/Verlauf
+ * bleiben unangetastet. Die user_id kommt aus der Session (RLS schützt: nur
+ * eigene Rows). Offline / keine Session -> no-op (lokaler Reset passiert
+ * trotzdem im State).
+ */
+export async function deletePlanRows(): Promise<SyncResult> {
+  const now = new Date().toISOString();
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: 'offline' };
+
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData?.user?.id;
+  if (!uid) return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: 'no_user' };
+
+  // Kinder zuerst (FK), dann Eltern — gleiche Reihenfolge wie Account-Löschung.
+  const weeks = await supabase.from('gym_plan_weeks').delete().eq('user_id', uid);
+  if (weeks.error) {
+    return { ok: false, pushed: 0, pulled: 0, syncedAt: now, error: `gym_plan_weeks: ${weeks.error.message}` };
+  }
+  const frameworks = await supabase.from('gym_plan_frameworks').delete().eq('user_id', uid);
+  if (frameworks.error) {
+    return {
+      ok: false,
+      pushed: 0,
+      pulled: 0,
+      syncedAt: now,
+      error: `gym_plan_frameworks: ${frameworks.error.message}`,
+    };
+  }
+  return { ok: true, pushed: 0, pulled: 0, syncedAt: now };
 }

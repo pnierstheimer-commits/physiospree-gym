@@ -71,7 +71,7 @@ export function ProfileScreen({
   onSignOut: () => void;
   onOpenLegal: (page: LegalPage) => void;
 }) {
-  const { state, currentPlan, clearPlan, setActiveTab } = useApp();
+  const { state, currentPlan, resetPlan, setActiveTab } = useApp();
   const profile = state.profile;
   const fw = currentPlan?.framework ?? null;
 
@@ -106,7 +106,7 @@ export function ProfileScreen({
 
   const onReset = () => {
     if (window.confirm('Plan wirklich löschen? Alle Trainingsdaten bleiben erhalten.')) {
-      clearPlan();
+      void resetPlan();
       setActiveTab('plan');
     }
   };

@@ -30,7 +30,7 @@ function Splash() {
 
 function App() {
   const auth = useAuth()
-  const { state, replaceState, resetState, currentPlan, activeWorkout, activeTab, planLoading } =
+  const { state, update, replaceState, resetState, currentPlan, activeWorkout, activeTab, planLoading } =
     useApp()
   const userId = auth.user?.id ?? null
 
@@ -87,15 +87,23 @@ function App() {
   useEffect(() => {
     if (!userId) return
     pendingPush.current = true
+    const snapshot = state // gepushter Snapshot (für den High-Water-Mark)
+    const since = snapshot.lastSyncedAt ?? null // P2: nur Delta seit letztem Push
     const t = setTimeout(() => {
-      void pushChanges(userId, state)
+      void pushChanges(userId, snapshot, since)
         .then((res) => {
-          if (res.ok) pendingPush.current = false
+          if (!res.ok) return
+          pendingPush.current = false
+          // P2: lastSyncedAt auf den High-Water-Mark des Snapshots heben — nur
+          // wenn tatsächlich etwas geschrieben wurde (sonst Schreib-Loop).
+          if (res.pushed > 0 && snapshot.lastSyncedAt !== snapshot.stateUpdatedAt) {
+            update(() => ({ lastSyncedAt: snapshot.stateUpdatedAt }))
+          }
         })
         .catch(() => {})
     }, 1500)
     return () => clearTimeout(t)
-  }, [userId, state])
+  }, [userId, state, update])
 
   // P3: Reconnect (online) + Rückkehr in den Vordergrund (visibilitychange,
   // wichtig für die PWA auf dem iPhone) -> voller Sync (pull-merge-push).

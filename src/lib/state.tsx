@@ -39,6 +39,7 @@ import { generatePlan, parseMarkers } from './services/planService';
 import { ensureScheduledDays } from './services/scheduleService';
 import { requestChatReply, toParsedMarkers } from './services/chatService';
 import { applyMarkerToWeeks } from './services/markerService';
+import { deletePlanRows } from './sync';
 
 // ---------------------------------------------------------------------------
 // Initialer / leerer State
@@ -108,8 +109,14 @@ interface AppContextValue {
    * extrahiert die Marker (noch ohne Anwendung — Phase 3).
    */
   setPlan: (plan: PlanResponse) => void;
-  /** Entfernt den aktuellen Plan. */
+  /** Entfernt den aktuellen Plan nur lokal (z. B. nach Generierungsfehler). */
   clearPlan: () => void;
+  /**
+   * Setzt den Plan zurück (P4): löscht die Plan-Rows auf dem Server (Workouts
+   * bleiben erhalten) UND leert den lokalen Plan-State. Verhindert, dass andere
+   * Geräte den Plan beim nächsten Pull wieder runterziehen.
+   */
+  resetPlan: () => Promise<void>;
   /** Fordert einen Plan über den planService an und pflegt loading/error/plan. */
   requestPlan: (profile: UserProfile) => Promise<void>;
   /**
@@ -253,6 +260,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const clearPlan = useCallback<AppContextValue['clearPlan']>(() => {
     update(() => ({ currentPlan: null, parsedMarkers: [] }));
+    setPlanError(null);
+  }, [update]);
+
+  const resetPlan = useCallback<AppContextValue['resetPlan']>(async () => {
+    // Server-Plan-Daten löschen (client-seitig, RLS-scoped). Offline / Fehler ->
+    // der lokale Reset passiert trotzdem.
+    try {
+      await deletePlanRows();
+    } catch {
+      /* offline / RLS — lokal trotzdem zurücksetzen */
+    }
+    // Lokal ALLES Plan-bezogene leeren (auch frameworks!), sonst würde der
+    // nächste Voll-Push den Plan wieder anlegen. Workouts bleiben erhalten.
+    update(() => ({ currentPlan: null, frameworks: [], parsedMarkers: [] }));
     setPlanError(null);
   }, [update]);
 
@@ -578,6 +599,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       planError,
       setPlan,
       clearPlan,
+      resetPlan,
       requestPlan,
       updateWeekSessions,
       ensureSchedule,
@@ -606,6 +628,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       planError,
       setPlan,
       clearPlan,
+      resetPlan,
       requestPlan,
       updateWeekSessions,
       ensureSchedule,
