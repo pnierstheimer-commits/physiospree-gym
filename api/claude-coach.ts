@@ -226,6 +226,18 @@ function buildUserPrompt(
     }
   });
 
+  if (isCalibration) {
+    lines.push('');
+    lines.push(
+      'KALIBRIERUNG: Diese Einheit legt die Startgewichte fest. Gib für JEDE Übung ' +
+        'das ermittelte Arbeitsgewicht (die Last bei RPE 6–7, bei der die untere ' +
+        'Rep-Range erreicht wurde) als `newLoad` (absolut, in kg) im evaluation-Eintrag ' +
+        'an — nicht nur im Text. Setze pro Übung zusätzlich genau einen ' +
+        '`LOAD_ADJUSTMENT`-Marker (exerciseName + reason), damit das Startgewicht in den ' +
+        'Plan übernommen wird.',
+    );
+  }
+
   lines.push('');
   lines.push('AUSGABE');
   lines.push(

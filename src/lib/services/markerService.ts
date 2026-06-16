@@ -104,17 +104,30 @@ function mapWeeks(
 
 function loadAdjustment(weeks: PlanWeek[], marker: ParsedMarker, now: string): PlanWeek[] {
   const name = asStr(marker.payload.exerciseName);
+  if (!name) return weeks;
+  // newLoad (absolutes Zielgewicht) hat Vorrang vor delta (relativ).
+  const newLoad =
+    typeof marker.payload.newLoad === 'number' && Number.isFinite(marker.payload.newLoad)
+      ? round25(marker.payload.newLoad)
+      : null;
   const delta = asNum(marker.payload.delta, 0);
-  if (!name || !delta) return weeks;
+  if (newLoad === null && !delta) return weeks; // nichts anzuwenden
+
   return weeks.map((w) => ({
     ...w,
     sessions: w.sessions.map((s) => ({
       ...s,
-      exercises: s.exercises.map((pe) =>
-        exName(pe.notes) === name && typeof pe.suggestedLoadKg === 'number'
+      exercises: s.exercises.map((pe) => {
+        if (exName(pe.notes) !== name) return pe;
+        // Absolut setzen — greift auch auf null-Feldern (Kalibrierung).
+        if (newLoad !== null) {
+          return { ...pe, suggestedLoadKg: newLoad, updatedAt: now };
+        }
+        // Sonst relatives Delta, nur auf bestehender numerischer Last.
+        return typeof pe.suggestedLoadKg === 'number'
           ? { ...pe, suggestedLoadKg: pe.suggestedLoadKg + delta, updatedAt: now }
-          : pe,
-      ),
+          : pe;
+      }),
     })),
   }));
 }

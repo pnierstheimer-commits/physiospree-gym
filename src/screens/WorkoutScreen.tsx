@@ -358,7 +358,7 @@ export function WorkoutScreen() {
   };
 
   const onAcknowledge = () => {
-    if (evaluation) applyMarkers(convertCoachMarkers(evaluation.markers));
+    if (evaluation) applyMarkers(convertCoachMarkers(evaluation.markers, evaluation.evaluation));
     completeWorkout();
   };
 

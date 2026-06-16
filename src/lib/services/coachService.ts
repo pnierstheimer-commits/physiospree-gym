@@ -138,20 +138,35 @@ const MARKER_KINDS: ParsedMarkerKind[] = [
  * `ParsedMarker` um, die der State anwenden kann. Unbekannte Marker-Typen
  * werden verworfen. Die Roh-Felder (exerciseName, delta) bleiben in `payload`
  * erhalten, damit `applyMarkers` sie auswerten kann.
+ *
+ * Für LOAD_ADJUSTMENT wird zusätzlich das absolute Zielgewicht (`newLoad`) aus
+ * der Übungs-Auswertung übernommen (Match per exerciseName). Damit kann
+ * `loadAdjustment` die Last absolut setzen — auch auf zuvor null-Feldern
+ * (Kalibrierungsfall) — statt nur ein relatives Delta zu addieren.
  */
-export function convertCoachMarkers(coachMarkers: CoachMarker[]): ParsedMarker[] {
+export function convertCoachMarkers(
+  coachMarkers: CoachMarker[],
+  evaluation: CoachEvaluationItem[] = [],
+): ParsedMarker[] {
   const out: ParsedMarker[] = [];
   for (const m of coachMarkers) {
     if (!(MARKER_KINDS as string[]).includes(m.type)) continue;
+    const payload: Record<string, unknown> = {
+      exerciseName: m.exerciseName,
+      delta: m.delta,
+    };
+    if (m.type === 'LOAD_ADJUSTMENT' && m.exerciseName) {
+      const item = evaluation.find((e) => e.exerciseName === m.exerciseName);
+      if (item && typeof item.newLoad === 'number' && Number.isFinite(item.newLoad)) {
+        payload.newLoad = item.newLoad;
+      }
+    }
     out.push({
       kind: m.type as ParsedMarkerKind,
       sourceActionId: uuidv4(),
       rationale: m.reason,
       targetId: null,
-      payload: {
-        exerciseName: m.exerciseName,
-        delta: m.delta,
-      },
+      payload,
     });
   }
   return out;

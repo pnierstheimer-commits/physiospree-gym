@@ -39,6 +39,7 @@ import { generatePlan, parseMarkers } from './services/planService';
 import { ensureScheduledDays } from './services/scheduleService';
 import { requestChatReply, toParsedMarkers } from './services/chatService';
 import { applyMarkerToWeeks } from './services/markerService';
+import { applyCalibrationLoads, findCalibrationSession } from './services/calibrationService';
 import { deletePlanRows } from './sync';
 
 // ---------------------------------------------------------------------------
@@ -421,7 +422,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         totalDuration,
         updatedAt: now,
       };
-      return { workouts: prev.workouts.map((w, i) => (i === idx ? done : w)) };
+      const workouts = prev.workouts.map((w, i) => (i === idx ? done : w));
+
+      // Kalibrierung: ermittelte Arbeitsgewichte als absolute Startlast in alle
+      // Folgeeinheiten schreiben (client-seitig, zuverlässig — nicht über den
+      // Coach-Marker-Weg). Greift auch auf den vorab generierten Wochen 1–2.
+      if (prev.currentPlan) {
+        const fw = prev.currentPlan.framework;
+        const calibration = findCalibrationSession(fw, done);
+        if (calibration) {
+          const res = applyCalibrationLoads(fw.weeks, calibration, done, now);
+          if (res.applied.length > 0) {
+            return {
+              workouts,
+              currentPlan: {
+                ...prev.currentPlan,
+                framework: { ...fw, weeks: res.weeks, updatedAt: now },
+              },
+            };
+          }
+        }
+      }
+      return { workouts };
     });
   }, [update]);
 
