@@ -573,7 +573,14 @@ function buildWindowUserPrompt(
       lines.push(`Einheit: ${wo.name}`);
       for (const we of [...wo.exercises].sort((a, b) => a.order - b.order)) {
         const sets = [...we.sets].sort((a, b) => a.setNumber - b.setNumber);
-        const txt = sets.map((s) => `${s.weightKg}kg×${s.reps}@${s.rpe ?? '-'}`).join(', ');
+        const txt = sets
+          .map((s) => {
+            if (typeof s.cardioMinutes === 'number')
+              return `${s.cardioMinutes}min${s.cardioMachine ? ` ${s.cardioMachine}` : ''}`;
+            if (typeof s.durationSeconds === 'number') return `${s.durationSeconds}s@${s.rpe ?? '-'}`;
+            return `${s.weightKg ?? 0}kg×${s.reps ?? 0}@${s.rpe ?? '-'}`;
+          })
+          .join(', ');
         lines.push(`  ${summarizeName(we.notes)}: ${txt || 'keine Sätze'}`);
       }
     }

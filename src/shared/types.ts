@@ -163,6 +163,17 @@ export interface PlannedSession extends Syncable {
   status: SessionStatus;
 }
 
+/**
+ * Eingabe-Modus einer Übung im Workout-Player:
+ *  - 'weight_reps'      Gewicht + Reps (Default, klassisch)
+ *  - 'time'             Zeit in Sekunden + RPE (z. B. Plank), kein Gewicht
+ *  - 'cardio'           Geräteauswahl + Minuten (Aufwärmen), kein Gewicht/Reps
+ *  - 'bodyweight_reps'  nur Reps + RPE, optional Zusatzgewicht (Klimmzug u. ä.)
+ * Optional/abwärtskompatibel: fehlt der Wert, leitet die UI ihn aus Name/Cue/
+ * Katalog ab (inputModeService). Lebt im sessions-JSONB — keine Migration.
+ */
+export type InputMode = 'weight_reps' | 'time' | 'cardio' | 'bodyweight_reps';
+
 export interface PlannedExercise extends Syncable {
   sessionId: UUID;
   exerciseId: UUID;
@@ -177,6 +188,8 @@ export interface PlannedExercise extends Syncable {
   restSeconds: number;
   /** Optionaler Lastvorschlag des Coaches in kg. */
   suggestedLoadKg?: number;
+  /** Eingabe-Modus (Default 'weight_reps'; wird sonst clientseitig abgeleitet). */
+  inputMode?: InputMode;
   notes?: string;
 }
 
@@ -214,14 +227,23 @@ export interface WorkoutSet extends Syncable {
   workoutExerciseId: UUID;
   /** Satznummer innerhalb der Übung (1-basiert). */
   setNumber: number;
-  reps: number;
-  weightKg: number;
+  /** Wiederholungen. Optional: bei 'time'/'cardio' nicht gesetzt. */
+  reps?: number;
+  /** Last in kg. Optional: bei 'time'/'cardio' nicht gesetzt; bei
+   *  'bodyweight_reps' optionales Zusatzgewicht. */
+  weightKg?: number;
+  /** Gehaltene Zeit in Sekunden ('time'-Modus, z. B. Plank). */
+  durationSeconds?: number;
+  /** Gewähltes Cardio-Gerät ('cardio'-Modus, z. B. "Ergometer"). */
+  cardioMachine?: string;
+  /** Cardio-Dauer in Minuten ('cardio'-Modus). */
+  cardioMinutes?: number;
   /** Tatsächliches RPE des Satzes. */
   rpe?: number;
   /** Wiederholungen in Reserve (Reps in Reserve). */
   rir?: number;
   completed: boolean;
-  /** Warm-up-Satz zählt nicht zum Arbeitsvolumen. */
+  /** Warm-up-Satz zählt nicht zum Arbeitsvolumen (auch Cardio/Aufwärmen). */
   isWarmup: boolean;
 }
 

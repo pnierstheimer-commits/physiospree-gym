@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useApp } from '../lib/state';
-import type { Workout, WorkoutExercise } from '../shared/types';
+import type { Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
 import './screens.css';
 
 /** Übungsname aus notes ("Name — cue"). */
@@ -27,10 +27,22 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
 }
 
-/** Höchstes Arbeitsgewicht einer geloggten Übung. */
+/** Höchstes Arbeitsgewicht einer geloggten Übung (ignoriert Zeit/Cardio/Aufwärmen). */
 function topWeight(we: WorkoutExercise): number | null {
-  const ws = we.sets.filter((s) => !s.isWarmup).map((s) => s.weightKg);
+  const ws = we.sets
+    .filter((s) => !s.isWarmup && typeof s.weightKg === 'number' && s.weightKg > 0)
+    .map((s) => s.weightKg as number);
   return ws.length ? Math.max(...ws) : null;
+}
+
+/** Ist-Werte eines Satzes fürs Journal — zeigt das, was geloggt wurde. */
+function fmtJournalSet(s: WorkoutSet): string {
+  if (typeof s.cardioMinutes === 'number') {
+    return `${s.cardioMinutes} min${s.cardioMachine ? ` · ${s.cardioMachine}` : ''}`;
+  }
+  if (typeof s.durationSeconds === 'number') return `${s.durationSeconds}s gehalten`;
+  const w = typeof s.weightKg === 'number' && s.weightKg > 0 ? `${fmtKg(s.weightKg)} kg × ` : '';
+  return `${w}${s.reps ?? 0}`;
 }
 
 interface Progression {
@@ -115,7 +127,7 @@ export function JournalScreen() {
                             ) : (
                               sets.map((s) => (
                                 <div key={s.id} className="ps-jr-set">
-                                  Satz {s.setNumber}: {fmtKg(s.weightKg)} kg × {s.reps}
+                                  Satz {s.setNumber}: {fmtJournalSet(s)}
                                   {s.rpe != null ? ` | RPE ${s.rpe}` : ''}
                                 </div>
                               ))

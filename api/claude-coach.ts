@@ -185,6 +185,33 @@ function splitName(notes: string | undefined): string {
   return i === -1 ? notes : notes.slice(0, i);
 }
 
+/** Cue aus dem notes-Feld ("Name — cue"). */
+function splitCue(notes: string | undefined): string {
+  if (!notes) return '';
+  const i = notes.indexOf(' — ');
+  return i === -1 ? '' : notes.slice(i + 3);
+}
+
+type CoachInputMode = 'weight_reps' | 'time' | 'cardio' | 'bodyweight_reps';
+
+/** Eingabe-Modus serverseitig ableiten (gespiegelt zu inputModeService). */
+function resolveMode(pe: PlannedExercise | undefined, name: string, cue: string): CoachInputMode {
+  const m = pe?.inputMode;
+  if (m === 'weight_reps' || m === 'time' || m === 'cardio' || m === 'bodyweight_reps') return m;
+  const hay = `${name} ${cue}`;
+  if (/aufwärm|cardio|ergometer|laufband|crosstrainer|crosser|ruderergometer|rudergerät|stepper/i.test(hay)) {
+    return 'cardio';
+  }
+  if (
+    /plank|planke|unterarmst(?:ü|u)tz|dead.?bug|\bhold\b|isometr/i.test(name) ||
+    /\b\d{2,}\s*(?:s\b|sek\b|sekunden\b)/i.test(hay)
+  ) {
+    return 'time';
+  }
+  if (/körpergewicht|liegestütz|push.?up/i.test(hay)) return 'bodyweight_reps';
+  return 'weight_reps';
+}
+
 function formatReps(range: [number, number]): string {
   return range[0] === range[1] ? `${range[0]}` : `${range[0]}–${range[1]}`;
 }
@@ -208,23 +235,57 @@ function buildUserPrompt(
   lines.push('');
   lines.push('SATZ-DATEN');
 
+  const MODE_LABEL: Record<CoachInputMode, string> = {
+    weight_reps: 'Gewicht×Reps',
+    time: 'Zeit (Sekunden)',
+    cardio: 'Cardio (Minuten)',
+    bodyweight_reps: 'Körpergewicht-Reps',
+  };
+
   const exercises = [...workout.exercises].sort((a, b) => a.order - b.order);
   exercises.forEach((we: WorkoutExercise, i) => {
     const pe = plannedExercises[i];
     const name = splitName(we.notes);
+    const mode = resolveMode(pe, name, splitCue(we.notes));
     const repRange = pe ? formatReps(pe.targetReps) : '—';
     const rpeTarget = pe ? `${pe.targetRPE}` : '—';
     lines.push('');
-    lines.push(`Übung: ${name} | Rep-Range: ${repRange} | RPE-Ziel: ${rpeTarget}`);
+    if (mode === 'weight_reps' || mode === 'bodyweight_reps') {
+      lines.push(`Übung: ${name} | Typ: ${MODE_LABEL[mode]} | Rep-Range: ${repRange} | RPE-Ziel: ${rpeTarget}`);
+    } else {
+      lines.push(`Übung: ${name} | Typ: ${MODE_LABEL[mode]}`);
+    }
     const sets = [...we.sets].sort((a, b) => a.setNumber - b.setNumber);
     if (sets.length === 0) {
       lines.push('  (keine Sätze erfasst)');
     } else {
       for (const s of sets) {
-        lines.push(`Satz ${s.setNumber}: ${s.weightKg} kg × ${s.reps} | RPE ${s.rpe ?? '-'}`);
+        if (mode === 'cardio') {
+          lines.push(
+            `Satz ${s.setNumber}: ${s.cardioMinutes ?? 0} min${s.cardioMachine ? ` (${s.cardioMachine})` : ''}`,
+          );
+        } else if (mode === 'time') {
+          lines.push(`Satz ${s.setNumber}: ${s.durationSeconds ?? 0}s gehalten | RPE ${s.rpe ?? '-'}`);
+        } else if (mode === 'bodyweight_reps') {
+          lines.push(
+            `Satz ${s.setNumber}: Körpergewicht${s.weightKg ? ` +${s.weightKg} kg` : ''} × ${s.reps ?? 0} | RPE ${s.rpe ?? '-'}`,
+          );
+        } else {
+          lines.push(`Satz ${s.setNumber}: ${s.weightKg ?? 0} kg × ${s.reps ?? 0} | RPE ${s.rpe ?? '-'}`);
+        }
       }
     }
   });
+
+  lines.push('');
+  lines.push(
+    'EINGABE-TYPEN: Übungen werden unterschiedlich geloggt — Gewicht×Reps, Zeit ' +
+      '(Sekunden gehalten, z. B. Plank), Cardio (Minuten am Gerät, z. B. Aufwärmen) oder ' +
+      'Körpergewicht-Reps. Zeit-Übungen über die gehaltene Dauer bewerten (ggf. Zeit ' +
+      'steigern statt Last). Körpergewicht-Reps wie Reps werten, ohne Last-Logik. ' +
+      'Cardio/Aufwärmen wird NICHT progrediert — nur als erledigt vermerken ' +
+      '(adjustment "maintain", kein Marker, currentLoad 0).',
+  );
 
   if (isCalibration) {
     lines.push('');

@@ -942,6 +942,36 @@
   color: hsl(var(--primary-foreground));
 }
 
+/* Cardio-Geräteauswahl (cardio-Modus / Aufwärmen) */
+.ps-machines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ps-machine-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ps-machine-btn {
+  flex: 1 1 calc(50% - 8px);
+  min-width: 40px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ps-machine-btn.is-active {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
 /* Pause-Timer */
 .ps-timer {
   margin-top: 22px;

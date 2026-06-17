@@ -222,13 +222,18 @@ function exerciseToRow(e: WorkoutExercise, userId: string): Row {
 }
 
 function setToRow(s: WorkoutSet, userId: string): Row {
+  // Hinweis: Das geteilte Supabase-Schema (gym_workout_sets) kennt nur die
+  // relationalen Spalten reps/weight_kg/rpe/… — KEINE für durationSeconds,
+  // cardioMachine, cardioMinutes (Schema eingefroren, keine Migration). Diese
+  // Zeit-/Cardio-Felder bleiben daher in localStorage (Laufzeit-Primärquelle,
+  // Regel 9). reps/weight_kg sind NOT NULL -> Fallback 0 bei time/cardio.
   return {
     id: s.id,
     workout_exercise_id: s.workoutExerciseId,
     user_id: userId,
     set_number: s.setNumber,
-    reps: s.reps,
-    weight_kg: s.weightKg,
+    reps: s.reps ?? 0,
+    weight_kg: s.weightKg ?? 0,
     rpe: s.rpe ?? null,
     rir: s.rir ?? null,
     completed: s.completed,

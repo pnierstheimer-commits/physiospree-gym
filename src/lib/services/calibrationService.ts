@@ -50,16 +50,16 @@ export function workingWeightFromSets(sets: WorkoutSet[], repMin: number): numbe
       typeof s.rpe === 'number' &&
       s.rpe >= 6 &&
       s.rpe <= 7 &&
-      s.reps >= repMin,
+      (s.reps ?? 0) >= repMin,
   );
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => {
     const da = Math.abs((a.rpe as number) - 7);
     const db = Math.abs((b.rpe as number) - 7);
     if (da !== db) return da - db; // näher an RPE 7 zuerst
-    return b.weightKg - a.weightKg; // Tie: höhere Last
+    return (b.weightKg as number) - (a.weightKg as number); // Tie: höhere Last
   });
-  return candidates[0].weightKg;
+  return candidates[0].weightKg as number;
 }
 
 /**

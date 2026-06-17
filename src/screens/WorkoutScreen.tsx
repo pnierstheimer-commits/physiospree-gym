@@ -28,8 +28,13 @@ import {
   type ExerciseGroup,
 } from '../lib/services/exerciseGroupService';
 import { isCalibrationSession } from '../lib/services/planMeta';
+import {
+  CARDIO_MACHINES,
+  parseTargetSeconds,
+  resolveInputMode,
+} from '../lib/services/inputModeService';
 import { ExerciseInfo } from '../components/ExerciseInfo';
-import type { Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
+import type { InputMode, Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
 import './screens.css';
 
 const RPE_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
@@ -51,6 +56,12 @@ interface SetInput {
   weight: string;
   reps: string;
   rpe: number | null;
+  /** 'time': gehaltene Sekunden. */
+  seconds: string;
+  /** 'cardio': gewähltes Gerät. */
+  machine: string;
+  /** 'cardio': Minuten. */
+  minutes: string;
 }
 
 interface ExView {
@@ -66,6 +77,10 @@ interface ExView {
   targetRPE: number;
   restSeconds: number;
   suggestedLoadKg: number | null;
+  /** Eingabe-Modus (abgeleitet oder aus dem Plan). */
+  mode: InputMode;
+  /** Zielzeit in Sekunden ('time'-Modus, aus dem Cue), sonst null. */
+  targetSeconds: number | null;
 }
 
 /** 'pos' = Zirkel-Wechsel (nächste Übung), 'round' = nächste Runde, null = klassische Pause. */
@@ -84,8 +99,12 @@ function splitExercise(notes: string | undefined): { name: string; cue: string |
   return { name: notes.slice(0, idx), cue: notes.slice(idx + 3) };
 }
 
-function setComplete(v: SetInput): boolean {
-  return /^\d+$/.test(v.reps.trim()) && Number(v.reps) > 0 && v.rpe != null;
+function setComplete(v: SetInput, mode: InputMode = 'weight_reps'): boolean {
+  const pos = (s: string) => /^\d+$/.test(s.trim()) && Number(s) > 0;
+  if (mode === 'time') return pos(v.seconds) && v.rpe != null;
+  if (mode === 'cardio') return pos(v.minutes) && v.machine.trim() !== '';
+  // weight_reps | bodyweight_reps: Reps + RPE (Gewicht optional)
+  return pos(v.reps) && v.rpe != null;
 }
 
 function formatTime(s: number): string {
@@ -102,23 +121,52 @@ function formatClock(totalSeconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-/** Kompakte Ist-Werte einer Übung: "40 kg × 15/15/14 @ RPE 9". */
-function formatSetsSummary(sets: WorkoutSet[]): string {
-  if (sets.length === 0) return 'Keine Sätze erfasst';
-  const sorted = [...sets].sort((a, b) => a.setNumber - b.setNumber);
-  const load = sorted[0].weightKg;
-  const reps = sorted.map((s) => s.reps).join('/');
-  const rpe = sorted[0].rpe;
-  return `${load} kg × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
+/** Ist-Werte eines einzelnen Satzes je Modus (für Zusammenfassung/Journal). */
+function formatSetValue(s: WorkoutSet, mode: InputMode): string {
+  const rpe = s.rpe != null ? ` @ RPE ${s.rpe}` : '';
+  if (mode === 'cardio') {
+    return `${s.cardioMinutes ?? 0} min${s.cardioMachine ? ` · ${s.cardioMachine}` : ''}${rpe}`;
+  }
+  if (mode === 'time') return `${s.durationSeconds ?? 0}s gehalten${rpe}`;
+  if (mode === 'bodyweight_reps') {
+    return `× ${s.reps ?? 0}${s.weightKg ? ` +${s.weightKg} kg` : ''}${rpe}`;
+  }
+  return `${s.weightKg ?? 0} kg × ${s.reps ?? 0}${rpe}`;
 }
 
-/** Ziel-Zeile einer Übung: "3 × 8–12 @ 40 kg · RPE 8". */
+/** Kompakte Ist-Werte einer Übung (Coach-Auswertung). */
+function formatSetsSummary(sets: WorkoutSet[], mode: InputMode = 'weight_reps'): string {
+  if (sets.length === 0) return 'Keine Sätze erfasst';
+  const sorted = [...sets].sort((a, b) => a.setNumber - b.setNumber);
+  if (mode === 'cardio') {
+    const s = sorted[0];
+    return `${s.cardioMinutes ?? 0} min${s.cardioMachine ? ` · ${s.cardioMachine}` : ''}`;
+  }
+  if (mode === 'time') {
+    const secs = sorted.map((s) => `${s.durationSeconds ?? 0}s`).join('/');
+    const rpe = sorted[0].rpe;
+    return `${secs}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
+  }
+  const reps = sorted.map((s) => s.reps ?? 0).join('/');
+  const rpe = sorted[0].rpe;
+  if (mode === 'bodyweight_reps') {
+    return `KG × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
+  }
+  return `${sorted[0].weightKg ?? 0} kg × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
+}
+
+/** Ziel-Zeile einer Übung je Modus. */
 function targetText(ev: ExView): string {
+  if (ev.mode === 'cardio') return `${ev.targetSets > 1 ? `${ev.targetSets} × ` : ''}Gerät + Minuten`;
+  if (ev.mode === 'time') {
+    const t = ev.targetSeconds != null ? `${ev.targetSeconds}s` : 'Zeit';
+    return `${ev.targetSets} × ${t} halten · RPE ${ev.targetRPE}`;
+  }
   const reps = ev.repMin === ev.repMax ? `${ev.repMin}` : `${ev.repMin}–${ev.repMax}`;
   if (!ev.repMin && !ev.repMax) return `${ev.targetSets} Sätze`;
   return (
     `${ev.targetSets} × ${reps}` +
-    (ev.suggestedLoadKg != null ? ` @ ${ev.suggestedLoadKg} kg` : '') +
+    (ev.mode === 'weight_reps' && ev.suggestedLoadKg != null ? ` @ ${ev.suggestedLoadKg} kg` : '') +
     ` · RPE ${ev.targetRPE}`
   );
 }
@@ -203,6 +251,9 @@ export function WorkoutScreen() {
     const pe = plannedExs[i];
     const split = splitExercise(we.notes);
     const { letter, name } = parsePrefix(split.name);
+    const mode = resolveInputMode({ inputMode: pe?.inputMode, name, cue: split.cue });
+    const targetSeconds =
+      mode === 'time' ? parseTargetSeconds(`${split.cue ?? ''} ${name}`) : null;
     return {
       index: i,
       name,
@@ -215,6 +266,8 @@ export function WorkoutScreen() {
       targetRPE: pe?.targetRPE ?? 0,
       restSeconds: pe?.restSeconds ?? 90,
       suggestedLoadKg: pe?.suggestedLoadKg ?? null,
+      mode,
+      targetSeconds,
     };
   });
 
@@ -238,13 +291,22 @@ export function WorkoutScreen() {
     if (draft) return draft;
     const logged = ev.we.sets.find((s) => s.setNumber === sn);
     return {
-      weight: logged
-        ? String(logged.weightKg)
-        : ev.suggestedLoadKg != null
-          ? String(ev.suggestedLoadKg)
-          : '',
-      reps: logged ? String(logged.reps) : '',
+      weight:
+        logged?.weightKg != null
+          ? String(logged.weightKg)
+          : !logged && ev.mode === 'weight_reps' && ev.suggestedLoadKg != null
+            ? String(ev.suggestedLoadKg)
+            : '',
+      reps: logged?.reps != null ? String(logged.reps) : '',
       rpe: logged?.rpe ?? null,
+      seconds:
+        logged?.durationSeconds != null
+          ? String(logged.durationSeconds)
+          : !logged && ev.targetSeconds != null
+            ? String(ev.targetSeconds)
+            : '',
+      machine: logged?.cardioMachine ?? '',
+      minutes: logged?.cardioMinutes != null ? String(logged.cardioMinutes) : '',
     };
   };
 
@@ -253,21 +315,39 @@ export function WorkoutScreen() {
     const cur = valueOf(ev, sn);
     const next = { ...cur, ...patch };
     setInputs((prev) => ({ ...prev, [`${ev.index}:${sn}`]: next }));
-    const becameComplete = !setComplete(cur) && setComplete(next);
-    if (setComplete(next)) {
+    const becameComplete = !setComplete(cur, ev.mode) && setComplete(next, ev.mode);
+    if (setComplete(next, ev.mode)) {
       const existing = ev.we.sets.find((s) => s.setNumber === sn);
-      const wset: WorkoutSet = {
+      const base = {
         id: existing?.id ?? uuidv4(),
         updatedAt: new Date().toISOString(),
         deletedAt: null,
         workoutExerciseId: ev.we.id,
         setNumber: sn,
-        reps: Number(next.reps),
-        weightKg: next.weight.trim() === '' ? 0 : Number(next.weight),
-        rpe: next.rpe ?? undefined,
         completed: true,
-        isWarmup: false,
       };
+      let wset: WorkoutSet;
+      if (ev.mode === 'time') {
+        wset = { ...base, durationSeconds: Number(next.seconds), rpe: next.rpe ?? undefined, isWarmup: false };
+      } else if (ev.mode === 'cardio') {
+        // Cardio/Aufwärmen zählt nicht zum Arbeitsvolumen (isWarmup, keine Progression).
+        wset = {
+          ...base,
+          cardioMachine: next.machine,
+          cardioMinutes: Number(next.minutes),
+          rpe: next.rpe ?? undefined,
+          isWarmup: true,
+        };
+      } else {
+        // weight_reps | bodyweight_reps — Gewicht optional (Zusatzgewicht bei bodyweight).
+        wset = {
+          ...base,
+          reps: Number(next.reps),
+          weightKg: next.weight.trim() === '' ? undefined : Number(next.weight),
+          rpe: next.rpe ?? undefined,
+          isWarmup: false,
+        };
+      }
       logSet(ev.index, wset);
     }
     return becameComplete;
@@ -314,7 +394,7 @@ export function WorkoutScreen() {
     const rounds = roundsOf(g);
     return g.indices.every((idx) => {
       const ev = exViews[idx];
-      for (let r = 1; r <= rounds; r++) if (!setComplete(valueOf(ev, r))) return false;
+      for (let r = 1; r <= rounds; r++) if (!setComplete(valueOf(ev, r), ev.mode)) return false;
       return true;
     });
   };
@@ -425,7 +505,7 @@ export function WorkoutScreen() {
                     <span className="ps-eval-name">{item.exerciseName}</span>
                     <span className={`ps-pill ps-pill-${meta.tone}`}>{meta.label}</span>
                   </div>
-                  {ev && <div className="ps-eval-sets">{formatSetsSummary(ev.we.sets)}</div>}
+                  {ev && <div className="ps-eval-sets">{formatSetsSummary(ev.we.sets, ev.mode)}</div>}
                   <div className="ps-eval-adjust">{adjustmentLine(item)}</div>
                   <p className="ps-eval-rationale">{item.rationale}</p>
                 </div>
@@ -472,10 +552,7 @@ export function WorkoutScreen() {
                       {sets.map((s) => (
                         <div key={s.id} className="ps-sum-set">
                           <span>Satz {s.setNumber}</span>
-                          <span className="ps-ex-spec">
-                            {s.weightKg} kg × {s.reps}
-                            {s.rpe != null ? ` @ RPE ${s.rpe}` : ''}
-                          </span>
+                          <span className="ps-ex-spec">{formatSetValue(s, ev.mode)}</span>
                         </div>
                       ))}
                     </div>
@@ -541,6 +618,107 @@ export function WorkoutScreen() {
     );
   };
 
+  // Eingabefelder eines klassischen Satzes je Modus (weight_reps/time/cardio/bodyweight).
+  const renderSetBody = (ev: ExView, sn: number) => {
+    const v = valueOf(ev, sn);
+    if (ev.mode === 'cardio') {
+      return (
+        <>
+          <div className="ps-machines">
+            <span className="ps-field-label">Gerät</span>
+            <div className="ps-machine-btns">
+              {CARDIO_MACHINES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`ps-machine-btn${v.machine === m ? ' is-active' : ''}`}
+                  onClick={() => onSingleSet(ev, sn, { machine: m })}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="ps-field">
+            <span className="ps-field-label">Minuten</span>
+            <input
+              className="ps-input"
+              type="number"
+              inputMode="numeric"
+              value={v.minutes}
+              onFocus={() => setTimer(null)}
+              onChange={(e) => onSingleSet(ev, sn, { minutes: e.target.value })}
+            />
+          </label>
+          {renderRpe(ev, sn, false, (r) => onSingleSet(ev, sn, { rpe: r }))}
+        </>
+      );
+    }
+    if (ev.mode === 'time') {
+      return (
+        <>
+          <label className="ps-field">
+            <span className="ps-field-label">Sekunden gehalten</span>
+            <input
+              className="ps-input"
+              type="number"
+              inputMode="numeric"
+              value={v.seconds}
+              onFocus={() => setTimer(null)}
+              onChange={(e) => onSingleSet(ev, sn, { seconds: e.target.value })}
+            />
+          </label>
+          {renderRpe(ev, sn, false, (r) => onSingleSet(ev, sn, { rpe: r }))}
+        </>
+      );
+    }
+    // weight_reps | bodyweight_reps
+    return (
+      <>
+        <div className="ps-set-inputs">
+          {ev.mode === 'weight_reps' && (
+            <label className="ps-field">
+              <span className="ps-field-label">Gewicht (kg)</span>
+              <input
+                className="ps-input"
+                type="number"
+                inputMode="decimal"
+                value={v.weight}
+                onFocus={() => setTimer(null)}
+                onChange={(e) => onSingleSet(ev, sn, { weight: e.target.value })}
+              />
+            </label>
+          )}
+          <label className="ps-field">
+            <span className="ps-field-label">Reps</span>
+            <input
+              className="ps-input"
+              type="number"
+              inputMode="numeric"
+              value={v.reps}
+              onFocus={() => setTimer(null)}
+              onChange={(e) => onSingleSet(ev, sn, { reps: e.target.value })}
+            />
+          </label>
+          {ev.mode === 'bodyweight_reps' && (
+            <label className="ps-field">
+              <span className="ps-field-label">+kg (optional)</span>
+              <input
+                className="ps-input"
+                type="number"
+                inputMode="decimal"
+                value={v.weight}
+                onFocus={() => setTimer(null)}
+                onChange={(e) => onSingleSet(ev, sn, { weight: e.target.value })}
+              />
+            </label>
+          )}
+        </div>
+        {renderRpe(ev, sn, false, (r) => onSingleSet(ev, sn, { rpe: r }))}
+      </>
+    );
+  };
+
   return (
     <div className="ps-screen">
       <div className="ps-shell">
@@ -568,7 +746,7 @@ export function WorkoutScreen() {
         )}
 
         {group.type === 'single' ? (
-          // -------- Klassischer Satz (unverändert) --------
+          // -------- Klassischer Satz (mode-abhängige Eingabefelder) --------
           (() => {
             const ev = exViews[group.indices[0]];
             return (
@@ -581,38 +759,14 @@ export function WorkoutScreen() {
                   {Array.from({ length: ev.targetSets }, (_, k) => {
                     const sn = k + 1;
                     const v = valueOf(ev, sn);
-                    const done = setComplete(v);
+                    const done = setComplete(v, ev.mode);
                     return (
                       <div key={sn} className={`ps-set${done ? ' is-done' : ''}`}>
                         <div className="ps-set-head">
                           <span>Satz {sn}</span>
                           {done && <span className="ps-set-check">✓</span>}
                         </div>
-                        <div className="ps-set-inputs">
-                          <label className="ps-field">
-                            <span className="ps-field-label">Gewicht (kg)</span>
-                            <input
-                              className="ps-input"
-                              type="number"
-                              inputMode="decimal"
-                              value={v.weight}
-                              onFocus={() => setTimer(null)}
-                              onChange={(e) => onSingleSet(ev, sn, { weight: e.target.value })}
-                            />
-                          </label>
-                          <label className="ps-field">
-                            <span className="ps-field-label">Reps</span>
-                            <input
-                              className="ps-input"
-                              type="number"
-                              inputMode="numeric"
-                              value={v.reps}
-                              onFocus={() => setTimer(null)}
-                              onChange={(e) => onSingleSet(ev, sn, { reps: e.target.value })}
-                            />
-                          </label>
-                        </div>
-                        {renderRpe(ev, sn, false, (r) => onSingleSet(ev, sn, { rpe: r }))}
+                        {renderSetBody(ev, sn)}
                       </div>
                     );
                   })}
