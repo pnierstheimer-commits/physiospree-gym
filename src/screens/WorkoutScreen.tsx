@@ -32,10 +32,12 @@ import { ExerciseInfo } from '../components/ExerciseInfo';
 import type { Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
 import './screens.css';
 
-const RPE_OPTIONS = [6, 7, 8, 9, 10];
+const RPE_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 /** Feste Zirkel-Pausen (Sekunden). */
 const CIRCUIT_SWITCH_REST = 15;
 const CIRCUIT_ROUND_REST = 60;
+/** Pause zwischen den Sätzen in der Kalibrierung (Sekunden). */
+const CALIBRATION_REST = 60;
 
 const VERDICT_META: Record<Verdict, { label: string; tone: 'green' | 'red' | 'yellow' }> = {
   in_range: { label: 'Im Ziel', tone: 'green' },
@@ -271,10 +273,13 @@ export function WorkoutScreen() {
     return becameComplete;
   };
 
-  // Klassischer Satz: nach Abschluss Pause-Timer (wie bisher).
+  // Klassischer Satz: nach Abschluss Pause-Timer — aber nur, wenn noch ein Satz
+  // folgt (nach dem letzten Satz direkt zur nächsten Übung, kein Timer).
+  // Kalibrierung: feste 60s Pause zwischen den Sätzen.
   const onSingleSet = (ev: ExView, sn: number, patch: Partial<SetInput>) => {
-    if (applySet(ev, sn, patch)) {
-      setTimer({ secondsLeft: ev.restSeconds, key: `s:${ev.index}:${sn}`, advance: null });
+    if (applySet(ev, sn, patch) && sn < ev.targetSets) {
+      const rest = isCalibration ? CALIBRATION_REST : ev.restSeconds;
+      setTimer({ secondsLeft: rest, key: `s:${ev.index}:${sn}`, advance: null });
     }
   };
 

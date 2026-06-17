@@ -920,10 +920,13 @@
 }
 .ps-rpe {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .ps-rpe-btn {
-  flex: 1 1 0;
+  /* 4 pro Reihe -> 3–10 ergibt zwei Reihen (3-4-5-6 / 7-8-9-10), 375px-sicher. */
+  flex: 1 1 calc(25% - 8px);
+  min-width: 40px;
   min-height: 44px;
   border: 1px solid hsl(var(--border));
   background: hsl(var(--background));
