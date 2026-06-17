@@ -98,11 +98,12 @@ export function WeekRoadmap({ weeks, currentWeek, selectedWeek, onSelectWeek }: 
               {block.weeks.map((week) => {
                 const status = statusOf(week.weekIndex, currentWeek);
                 const selected = week.weekIndex === selectedWeek;
+                const isShell = week.sessions.length === 0;
                 return (
                   <button
                     type="button"
                     key={week.id}
-                    className={`ps-rm-row is-${status}${selected ? ' is-selected' : ''}`}
+                    className={`ps-rm-row is-${status}${selected ? ' is-selected' : ''}${isShell ? ' is-shell' : ''}`}
                     onClick={() => onSelectWeek(week.weekIndex)}
                     aria-current={status === 'current' ? 'step' : undefined}
                     aria-expanded={selected}

@@ -29,8 +29,9 @@ export function shouldGenerateNextWindow(plan: PlanResponse, workoutHistory: Wor
       sessionIds.has(w.plannedSessionId),
   ).length;
 
-  // Nächstes Fenster bereits vorhanden? (weekIndex jenseits der ersten 2 Wochen)
-  const hasNextWindow = weeks.some((w) => w.weekIndex >= 2);
+  // Nächstes Fenster bereits AUSGEARBEITET? Hüllen-Wochen (sessions: []) zählen
+  // nicht — sie sollen ja gerade vom Window gefüllt werden.
+  const hasNextWindow = weeks.some((w) => w.weekIndex >= 2 && w.sessions.length > 0);
 
   return !hasNextWindow && completedForWeek0 >= firstWeek.sessions.length;
 }

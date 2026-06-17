@@ -147,13 +147,31 @@ interface NormWeek {
   isDeload: boolean;
   sessions: NormSession[];
 }
+/** Hüllen-Woche (initialer Call): nur Phase + Fokus, keine Sessions. */
+interface NormShellWeek {
+  weekIndex: number;
+  phase: BlockPhase;
+  focus: string;
+}
 interface NormPlan {
   split: string;
   detailWeeks: NormWeek[];
+  shellWeeks: NormShellWeek[];
   coachMessage: string;
 }
 
 const BLOCK_PHASES: BlockPhase[] = ['accumulation', 'intensification', 'peak', 'deload'];
+
+/** Phase aus EN-Key ODER DE-Label ("Intensivierung") -> BlockPhase. */
+function normalizePhase(v: unknown): BlockPhase {
+  const s = String(v ?? '').toLowerCase();
+  if (BLOCK_PHASES.includes(s as BlockPhase)) return s as BlockPhase;
+  if (s.includes('akkumul') || s.includes('accumul')) return 'accumulation';
+  if (s.includes('intensiv') || s.includes('intensif')) return 'intensification';
+  if (s.includes('realis') || s.includes('peak')) return 'peak';
+  if (s.includes('deload') || s.includes('entlad') || s.includes('entlast')) return 'deload';
+  return 'accumulation';
+}
 
 function asRecord(v: unknown, ctx: string): Record<string, unknown> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) {
@@ -277,12 +295,25 @@ function parseCoachPlan(raw: string): NormPlan {
   // Pflicht: Woche 1, Einheit 1 ist die Kalibrierung.
   detailWeeks[0].sessions[0].isCalibration = true;
 
+  // Hüllen-Wochen (optional, nur initialer Call): nur weekIndex/phase/focus.
+  const shellRaw = Array.isArray(root.shellWeeks) ? root.shellWeeks : [];
+  const shellWeeks: NormShellWeek[] = shellRaw
+    .map((wRaw, i) => {
+      const w = asRecord(wRaw, `shellWeeks[${i}]`);
+      return {
+        weekIndex: typeof w.weekIndex === 'number' ? w.weekIndex : -1,
+        phase: normalizePhase(w.phase),
+        focus: typeof w.focus === 'string' ? w.focus.trim() : '',
+      };
+    })
+    .filter((w) => w.weekIndex >= 0);
+
   const coachMessage =
     typeof root.coachMessage === 'string' && root.coachMessage.trim()
       ? root.coachMessage.trim()
       : precedingText;
 
-  return { split, detailWeeks, coachMessage };
+  return { split, detailWeeks, shellWeeks, coachMessage };
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +418,52 @@ function mapDetailWeeks(
   });
 }
 
+/**
+ * Hüllen-Wochen für die Indizes 2..cycleLength-1 (initialer Call). Nur Phase +
+ * Fokus, leere Sessions — der Rolling Window füllt sie nach Woche 2. Deckung
+ * garantiert: Phase/Fokus aus dem Modell (shellWeeks bzw. überzählige
+ * detailWeeks), sonst Fallback. Letzte Woche = Deload.
+ */
+function buildShellWeeks(
+  plan: NormPlan,
+  frameworkId: string,
+  cycleLengthWeeks: number,
+  now: string,
+  covered: Set<number>,
+): PlanWeek[] {
+  const info = new Map<number, { phase: BlockPhase; focus: string }>();
+  // Überzählige detailWeeks (Index >= 2) liefern zumindest die Phase.
+  for (const w of plan.detailWeeks.slice(2)) {
+    info.set(w.weekIndex, { phase: w.phase, focus: '' });
+  }
+  // shellWeeks des Modells haben Vorrang (inkl. Fokus-Text).
+  for (const sw of plan.shellWeeks) {
+    info.set(sw.weekIndex, { phase: sw.phase, focus: sw.focus });
+  }
+
+  const last = cycleLengthWeeks - 1;
+  const out: PlanWeek[] = [];
+  // Jeden Index ohne volle Woche als Hülle füllen (keine Lücken/Dopplungen).
+  for (let i = 0; i <= last; i++) {
+    if (covered.has(i)) continue;
+    const meta = info.get(i);
+    const isDeload = i === last;
+    out.push({
+      id: uuidv4(),
+      updatedAt: now,
+      deletedAt: null,
+      frameworkId,
+      weekIndex: i,
+      phase: meta?.phase ?? (isDeload ? 'deload' : 'accumulation'),
+      intensityFactor: 1,
+      isDeload,
+      focus: meta?.focus || undefined,
+      sessions: [],
+    });
+  }
+  return out;
+}
+
 function buildFramework(
   plan: NormPlan,
   profile: UserProfile,
@@ -397,7 +474,11 @@ function buildFramework(
   now: string,
 ): PlanFramework {
   const frameworkId = uuidv4();
-  const weeks = mapDetailWeeks(plan.detailWeeks, frameworkId, now, (w) => w.weekIndex);
+  // Nur die ersten 2 Wochen voll ausarbeiten; der Rest als Hülle (Schritt 1).
+  const fullWeeks = mapDetailWeeks(plan.detailWeeks.slice(0, 2), frameworkId, now, (w) => w.weekIndex);
+  const covered = new Set(fullWeeks.map((w) => w.weekIndex));
+  const shellWeeks = buildShellWeeks(plan, frameworkId, cycleLengthWeeks, now, covered);
+  const weeks = [...fullWeeks, ...shellWeeks].sort((a, b) => a.weekIndex - b.weekIndex);
 
   return {
     id: frameworkId,
@@ -447,6 +528,9 @@ const OUTPUT_SCHEMA = `{
         }
       ]
     }
+  ],
+  "shellWeeks": [
+    { "weekIndex": 2, "phase": "intensification", "focus": "Volumen leicht runter, Last hoch" }
   ],
   "markers": []
 }`;
@@ -505,10 +589,15 @@ function buildUserPrompt(
   lines.push('```');
   lines.push('');
   lines.push('Pflichten:');
-  lines.push('- detailWeeks: die ersten 2 Wochen vollständig (Tage → Übungen → Sätze).');
+  lines.push('- detailWeeks: GENAU die ersten 2 Wochen (weekIndex 0 und 1) vollständig (Tage → Übungen → Sätze). NICHT mehr.');
   lines.push('- Woche 1, erste Einheit: "type": "calibration".');
   lines.push('- Jede Übung: repRange [min,max], targetRPE, restSeconds, cue; suggestedLoadKg nur wenn sinnvoll, sonst null.');
-  lines.push('- letzter Block: "isDeload": true.');
+  lines.push(
+    `- shellWeeks: ALLE weiteren Wochen (weekIndex 2 bis ${cycleLengthWeeks - 1}) NUR als Hülle — ` +
+      'je { weekIndex, phase, focus }, KEINE sessions/Übungen. Diese werden erst nach Woche 2 ' +
+      'anhand des echten Feedbacks generiert.',
+  );
+  lines.push(`- letzte Woche (weekIndex ${cycleLengthWeeks - 1}): phase "deload".`);
 
   return lines.join('\n');
 }
@@ -770,14 +859,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const now = new Date().toISOString();
   const coachVersion = `${model}/plan-v1`;
 
-  // 5a) Window-Update: neue Wochen ans bestehende Framework anhängen.
+  // 5a) Window-Update: die nächsten leeren Hüllen-Wochen mit echten Sessions
+  //     überschreiben (Schritt 4). Fallback (Altpläne ohne Hüllen): anhängen.
   if (isWindow && existingPlan) {
     const fw = existingPlan.framework;
     const existingMax = Math.max(...fw.weeks.map((w) => w.weekIndex));
-    const newWeeks = mapDetailWeeks(plan.detailWeeks, fw.id, now, (_w, i) => existingMax + 1 + i);
+    // Ziel-Indizes: die nächsten leeren Hüllen (so viele wie generiert).
+    const shellIdx = fw.weeks
+      .filter((w) => w.sessions.length === 0)
+      .map((w) => w.weekIndex)
+      .sort((a, b) => a - b);
+    const targetIdx = shellIdx.slice(0, plan.detailWeeks.length);
+
+    const newWeeks = mapDetailWeeks(
+      plan.detailWeeks,
+      fw.id,
+      now,
+      (_w, i) => targetIdx[i] ?? existingMax + 1 + i,
+    );
+    // Hüllen-IDs wiederverwenden, damit der Sync die Zeile UPDATET statt ein
+    // Duplikat für denselben weekIndex anzulegen (Sessions-IDs sind neu).
+    for (const w of newWeeks) {
+      const shell = fw.weeks.find((s) => s.weekIndex === w.weekIndex && s.sessions.length === 0);
+      if (shell) {
+        w.id = shell.id;
+        w.sessions = w.sessions.map((s) => ({ ...s, weekId: shell.id }));
+      }
+    }
+    const replaced = new Set(targetIdx);
+    const keep = fw.weeks.filter((w) => !replaced.has(w.weekIndex));
+    const mergedWeeks = [...keep, ...newWeeks].sort((a, b) => a.weekIndex - b.weekIndex);
+
+    const fromWeek = (targetIdx[0] ?? existingMax + 1) + 1;
+    const toWeek = (targetIdx[targetIdx.length - 1] ?? existingMax + plan.detailWeeks.length) + 1;
     const framework: PlanFramework = {
       ...fw,
-      weeks: [...fw.weeks, ...newWeeks],
+      weeks: mergedWeeks,
       updatedAt: now,
     };
     const windowAction: CoachAction = {
@@ -787,13 +904,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       userId: fw.userId,
       type: 'maintain',
       rationale:
-        plan.coachMessage ||
-        `Nächste 2 Wochen generiert (Woche ${existingMax + 2}–${existingMax + 3}).`,
+        plan.coachMessage || `Nächste 2 Wochen generiert (Woche ${fromWeek}–${toWeek}).`,
       targetId: fw.id,
       payload: {
         kind: 'window_generated',
-        fromWeek: existingMax + 2,
-        toWeek: existingMax + 3,
+        fromWeek,
+        toWeek,
         coachVersion,
       },
       accepted: null,

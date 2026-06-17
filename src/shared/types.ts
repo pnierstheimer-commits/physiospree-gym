@@ -134,6 +134,14 @@ export interface PlanWeek extends Syncable {
   /** Globaler Volumen-/Intensitätsmultiplikator dieser Woche (1.0 = Basis). */
   intensityFactor: number;
   isDeload: boolean;
+  /**
+   * Kurzbeschreibung des Wochenfokus — nur für Hüllen-Wochen (sessions: [])
+   * gesetzt, die der initiale Plan-Call noch nicht ausarbeitet. Wird nach
+   * Woche 2 vom Rolling Window durch echte Sessions ersetzt. Optional; ohne
+   * eigene DB-Spalte (Schema eingefroren) -> localStorage-primär (Regel 9).
+   */
+  focus?: string;
+  /** Geplante Einheiten. Leer = Hülle (wird vom Rolling Window gefüllt). */
   sessions: PlannedSession[];
 }
 

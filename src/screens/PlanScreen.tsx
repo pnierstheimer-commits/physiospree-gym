@@ -244,7 +244,15 @@ export function PlanScreen() {
               )}
             </div>
             {selectedWeekObj.sessions.length === 0 ? (
-              <div className="ps-empty">Diese Woche ist noch nicht ausgeplant.</div>
+              <div className="ps-shell-week">
+                <div className="ps-shell-week-phase">{PHASE_LABEL[selectedWeekObj.phase]}</div>
+                {selectedWeekObj.focus && (
+                  <div className="ps-shell-week-focus">{selectedWeekObj.focus}</div>
+                )}
+                <div className="ps-shell-week-hint">
+                  Wird nach Woche 2 anhand deines Feedbacks generiert.
+                </div>
+              </div>
             ) : (
               <>
                 <WeekDayPlanner

@@ -700,6 +700,34 @@
   padding: 20px 0;
 }
 
+/* Hüllen-Woche im Detail: Phase + Fokus + Hinweis (dezent abgesetzt). */
+.ps-shell-week {
+  border: 1px dashed hsl(var(--border));
+  border-radius: 1rem;
+  background: hsl(var(--secondary) / 0.35);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  opacity: 0.85;
+}
+.ps-shell-week-phase {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+.ps-shell-week-focus {
+  font-size: 13px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+.ps-shell-week-hint {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground) / 0.8);
+  margin-top: 2px;
+}
+
 /* "Neuer Plan" — ruhiger Ghost-Button */
 .ps-btn-quiet {
   color: hsl(var(--muted-foreground));
@@ -1431,6 +1459,10 @@
 .ps-rm-row.is-selected {
   background: hsl(var(--secondary));
   border-color: hsl(var(--border));
+}
+/* Hüllen-Woche (noch nicht ausgearbeitet): dezent gedämpft. */
+.ps-rm-row.is-shell {
+  opacity: 0.5;
 }
 .ps-rm-dot {
   flex: 0 0 auto;
