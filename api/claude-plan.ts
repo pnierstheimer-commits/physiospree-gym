@@ -593,6 +593,13 @@ function buildUserPrompt(
   lines.push('- Woche 1, erste Einheit: "type": "calibration".');
   lines.push('- Jede Übung: repRange [min,max], targetRPE, restSeconds, cue; suggestedLoadKg nur wenn sinnvoll, sonst null.');
   lines.push(
+    '- AUFWÄRMSÄTZE NIEMALS als separate Übung ausgeben. Eine Mehrgelenk-Übung ist ' +
+      'GENAU EIN exercises-Eintrag (sets = nur die Arbeitssätze). Die übungsspezifischen ' +
+      'Aufwärmsätze gehören als kurzer Vorsatz in den cue derselben Übung, z. B.: ' +
+      '"Aufwärmsätze: 1×10 @ 50%, 1×5 @ 70%. Dann: <eigentlicher Cue>". ' +
+      'Es darf nie zwei exercises-Einträge mit demselben Übungsnamen geben.',
+  );
+  lines.push(
     `- shellWeeks: ALLE weiteren Wochen (weekIndex 2 bis ${cycleLengthWeeks - 1}) NUR als Hülle — ` +
       'je { weekIndex, phase, focus }, KEINE sessions/Übungen. Diese werden erst nach Woche 2 ' +
       'anhand des echten Feedbacks generiert.',
@@ -693,6 +700,11 @@ function buildWindowUserPrompt(
   lines.push(
     'Pflichten: detailWeeks = genau die 2 neuen Wochen; je Übung repRange/targetRPE/restSeconds/cue; ' +
       'suggestedLoadKg gesetzt (Progression eingerechnet); keine "calibration".',
+  );
+  lines.push(
+    'Aufwärmsätze NIEMALS als separate Übung — eine Mehrgelenk-Übung ist GENAU EIN ' +
+      'exercises-Eintrag (sets = nur Arbeitssätze), Aufwärmsätze als Vorsatz im cue ' +
+      '("Aufwärmsätze: 1×10 @ 50%, 1×5 @ 70%. Dann: …"). Kein doppelter Übungsname.',
   );
 
   return lines.join('\n');
