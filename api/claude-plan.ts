@@ -608,6 +608,15 @@ function buildUserPrompt(
     `- cycleLengthWeeks = ${cycleLengthWeeks} (Single Source aus constants.ts). ` +
       'Deload ist die letzte Woche. Blockstruktur an diese Länge anpassen.',
   );
+  lines.push(
+    `SPLIT-REGEL (nicht verhandelbar — Trainingstage/Woche = ${profile.daysPerWeek}):\n` +
+      '- 2 Trainingstage/Woche → IMMER 2× Ganzkörper (GK-A, GK-B). ' +
+      'NIEMALS Oberkörper/Unterkörper-Split bei 2 Tagen.\n' +
+      '- 3 Trainingstage/Woche → GK/GK/GK oder OK/UK/GK.\n' +
+      '- 4 Trainingstage/Woche → 2× OK / 2× UK.\n' +
+      'Session-Namen bei 2 Tagen: "Ganzkörper A — [Phase]" und "Ganzkörper B — [Phase]" — ' +
+      'NICHT "Oberkörper A" oder "Unterkörper A".',
+  );
   lines.push('- Übungsauswahl, Reihenfolge und Stufen strikt nach exercises.md.');
   if (redirected) {
     lines.push(
@@ -753,6 +762,12 @@ function buildWindowUserPrompt(
     'Aufwärmsätze NIEMALS als separate Übung — eine Mehrgelenk-Übung ist GENAU EIN ' +
       'exercises-Eintrag (sets = nur Arbeitssätze), Aufwärmsätze als Vorsatz im cue ' +
       '("Aufwärmsätze: 1×10 @ 50%, 1×5 @ 70%. Dann: …"). Kein doppelter Übungsname.',
+  );
+  lines.push(
+    `SPLIT-REGEL (nicht verhandelbar — Trainingstage/Woche = ${fw.daysPerWeek}): ` +
+      '2 Tage → IMMER 2× Ganzkörper ("Ganzkörper A — [Phase]" / "Ganzkörper B — [Phase]"), ' +
+      'NIEMALS Oberkörper/Unterkörper-Split; 3 Tage → GK/GK/GK oder OK/UK/GK; 4 Tage → 2× OK / 2× UK. ' +
+      'Den Split der bestehenden Wochen beibehalten.',
   );
 
   return lines.join('\n');
