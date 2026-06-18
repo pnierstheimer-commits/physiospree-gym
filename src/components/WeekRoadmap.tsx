@@ -71,10 +71,18 @@ interface WeekRoadmapProps {
   currentWeek: number;
   /** Im Detail geöffnete Woche — wird hervorgehoben. */
   selectedWeek: number;
+  /** Woche, die den heutigen Kalendertag enthält (datumsbasiert), oder null. */
+  todayWeek?: number | null;
   onSelectWeek: (weekIndex: number) => void;
 }
 
-export function WeekRoadmap({ weeks, currentWeek, selectedWeek, onSelectWeek }: WeekRoadmapProps) {
+export function WeekRoadmap({
+  weeks,
+  currentWeek,
+  selectedWeek,
+  todayWeek = null,
+  onSelectWeek,
+}: WeekRoadmapProps) {
   const blocks = groupBlocks(weeks);
 
   return (
@@ -113,6 +121,7 @@ export function WeekRoadmap({ weeks, currentWeek, selectedWeek, onSelectWeek }: 
                       aria-hidden="true"
                     />
                     <span className="ps-rm-no">Woche {week.weekIndex + 1}</span>
+                    {week.weekIndex === todayWeek && <span className="ps-rm-tag is-today">Heute</span>}
                     {status === 'current' && <span className="ps-rm-tag is-current">aktuell</span>}
                     {week.isDeload && <span className="ps-rm-tag is-deload">Deload</span>}
                   </button>

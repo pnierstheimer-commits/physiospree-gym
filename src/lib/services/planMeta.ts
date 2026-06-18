@@ -60,6 +60,46 @@ export function weekDateRange(
   return { start, end };
 }
 
+/** Heute, lokal auf 00:00 normalisiert. */
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Gleicher Kalendertag (lokal)? */
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/**
+ * weekIndex der Woche, die den heutigen Tag enthält — oder null, wenn heute
+ * außerhalb des Plans liegt (vor dem Start, nach der letzten Woche) bzw. kein
+ * gültiges Startdatum existiert (alter Plan). Rein client-seitig.
+ */
+export function currentWeekIndexByDate(framework: PlanFramework): number | null {
+  const mon = planStartMonday(framework);
+  if (!mon) return null;
+  const days = Math.floor((startOfToday().getTime() - mon.getTime()) / 86_400_000);
+  if (days < 0) return null;
+  const wi = Math.floor(days / 7);
+  return framework.weeks.some((w) => w.weekIndex === wi) ? wi : null;
+}
+
+/** Ist (weekIndex, day) der heutige Kalendertag? false ohne gültiges Datum. */
+export function isTodaySession(
+  framework: PlanFramework,
+  weekIndex: number,
+  day: WeekDay | undefined,
+): boolean {
+  const d = sessionDate(framework, weekIndex, day);
+  return d != null && sameDay(d, new Date());
+}
+
 /** "Dienstag, 17. Juni". */
 export function formatSessionDate(d: Date): string {
   return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });

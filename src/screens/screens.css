@@ -1513,6 +1513,11 @@
   background: hsl(var(--status-yellow) / 0.22);
   color: hsl(var(--status-yellow));
 }
+/* "Heute" — datumsbasiert, dezent in Primary (cremefarben). */
+.ps-rm-tag.is-today {
+  background: hsl(var(--primary) / 0.16);
+  color: hsl(var(--primary));
+}
 
 /* --- WeekDayPlanner: Wochentags-Drag-and-Drop (Mo–So vertikal) --- */
 .ps-dayplanner {
@@ -1543,6 +1548,27 @@
   font-weight: 400;
   color: hsl(var(--muted-foreground) / 0.75);
   letter-spacing: 0.01em;
+}
+/* Heutiger Tag: Wochentag hervorheben + dezenter "Heute"-Marker + Slot-Akzent. */
+.ps-dp-day.is-today .ps-dp-day-label {
+  color: hsl(var(--foreground));
+}
+.ps-dp-day-today {
+  align-self: flex-start;
+  margin-top: 3px;
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--primary));
+  border-radius: 9999px;
+  padding: 1px 6px;
+}
+.ps-dp-day.is-today .ps-dp-day-slot {
+  border-style: solid;
+  border-color: hsl(var(--primary) / 0.55);
+  background: hsl(var(--secondary) / 0.45);
 }
 .ps-dp-day-slot {
   flex: 1 1 auto;

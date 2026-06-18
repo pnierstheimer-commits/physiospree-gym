@@ -66,14 +66,16 @@ interface DayRowProps {
   selectedId: string | null;
   onSelect: (s: PlannedSession) => void;
   date: string | null;
+  today: boolean;
 }
-function DayRow({ day, sessions, selectedId, onSelect, date }: DayRowProps) {
+function DayRow({ day, sessions, selectedId, onSelect, date, today }: DayRowProps) {
   const { setNodeRef, isOver } = useDroppable({ id: DAY_PREFIX + day });
   return (
-    <div className="ps-dp-day">
+    <div className={`ps-dp-day${today ? ' is-today' : ''}`}>
       <span className="ps-dp-day-label">
         {WEEKDAY_LABELS[day]}
         {date && <span className="ps-dp-day-date">{date}</span>}
+        {today && <span className="ps-dp-day-today">Heute</span>}
       </span>
       <div ref={setNodeRef} className={`ps-dp-day-slot${isOver ? ' is-over' : ''}`}>
         {sessions.length === 0 ? (
@@ -102,6 +104,8 @@ interface WeekDayPlannerProps {
   onSelectSession?: (s: PlannedSession) => void;
   /** Optionales absolutes Datum je Wochentag ("16.6."). null = kein Datum. */
   dateForDay?: (day: WeekDay) => string | null;
+  /** Ist dieser Wochentag heute? Hebt den Tag hervor. */
+  isToday?: (day: WeekDay) => boolean;
 }
 
 export function WeekDayPlanner({
@@ -110,6 +114,7 @@ export function WeekDayPlanner({
   selectedSessionId = null,
   onSelectSession,
   dateForDay,
+  isToday,
 }: WeekDayPlannerProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -161,6 +166,7 @@ export function WeekDayPlanner({
             selectedId={selectedSessionId}
             onSelect={(s) => onSelectSession?.(s)}
             date={dateForDay ? dateForDay(day) : null}
+            today={isToday ? isToday(day) : false}
           />
         ))}
       </div>

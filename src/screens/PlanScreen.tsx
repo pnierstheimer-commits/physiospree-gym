@@ -20,10 +20,12 @@ import { WeekRoadmap } from '../components/WeekRoadmap';
 import { WeekDayPlanner } from '../components/WeekDayPlanner';
 import { ExerciseInfo } from '../components/ExerciseInfo';
 import {
+  currentWeekIndexByDate,
   formatSessionDate,
   formatShortDate,
   formatWeekRange,
   isCalibrationSession,
+  isTodaySession,
   sessionDate,
   weekDateRange,
 } from '../lib/services/planMeta';
@@ -118,8 +120,15 @@ export function PlanScreen() {
   const { currentPlan, clearPlan, startWorkout, setPlan, workoutHistory, updateWeekSessions, ensureSchedule } =
     useApp();
 
-  const initialWeek = currentPlan?.framework.currentWeekIndex ?? 0;
-  const [selectedWeek, setSelectedWeek] = useState(initialWeek);
+  // Beim Öffnen die Woche vorauswählen, die den heutigen Tag enthält
+  // (datumsbasiert, planMeta). Liegt heute außerhalb des Plans / fehlt das
+  // Startdatum -> currentWeekIndex. Lazy-Initializer = genau einmal beim Mount
+  // (PlanScreen rendert nur mit vorhandenem Plan, siehe App-Routing).
+  const [selectedWeek, setSelectedWeek] = useState(() => {
+    const f = currentPlan?.framework;
+    if (!f) return 0;
+    return currentWeekIndexByDate(f) ?? f.currentWeekIndex;
+  });
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [windowState, setWindowState] = useState<'idle' | 'generating' | 'error'>('idle');
   const [windowError, setWindowError] = useState<string | null>(null);
@@ -167,6 +176,7 @@ export function PlanScreen() {
 
   const fw = currentPlan.framework;
   const split = extractSplit(currentPlan.actions);
+  const todayWeek = currentWeekIndexByDate(fw);
   const weeks = [...fw.weeks].sort((a, b) => a.weekIndex - b.weekIndex);
   const currentWeekObj = weeks.find((w) => w.weekIndex === fw.currentWeekIndex);
   const selectedWeekObj =
@@ -226,6 +236,7 @@ export function PlanScreen() {
           weeks={weeks}
           currentWeek={fw.currentWeekIndex}
           selectedWeek={selectedWeek}
+          todayWeek={todayWeek}
           onSelectWeek={onSelectWeek}
         />
 
@@ -264,6 +275,7 @@ export function PlanScreen() {
                     const d = sessionDate(fw, selectedWeekObj.weekIndex, day);
                     return d ? formatShortDate(d) : null;
                   }}
+                  isToday={(day) => isTodaySession(fw, selectedWeekObj.weekIndex, day)}
                 />
                 {selectedSession ? (
                   <SessionDetail
