@@ -183,21 +183,54 @@ function asArray(v: unknown, ctx: string): unknown[] {
   if (!Array.isArray(v)) throw new PlanValidationError(`${ctx} muss ein Array sein.`);
   return v;
 }
-function asNumber(v: unknown, ctx: string): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) {
-    throw new PlanValidationError(`${ctx} muss eine Zahl sein.`);
-  }
-  return v;
-}
 function asString(v: unknown, ctx: string): string {
   if (typeof v !== 'string') throw new PlanValidationError(`${ctx} muss ein String sein.`);
   return v;
 }
 
-function toRepRange(v: unknown, ctx: string): [number, number] {
-  const arr = asArray(v, ctx);
-  if (arr.length !== 2) throw new PlanValidationError(`${ctx} muss [min, max] sein.`);
-  return [asNumber(arr[0], `${ctx}[0]`), asNumber(arr[1], `${ctx}[1]`)];
+/**
+ * Tolerantes Zahl-Parsing: Zahl bleibt Zahl, String ("9", "9,5") wird geparst,
+ * sonst null. Der Coach liefert numerische Felder gelegentlich als String oder
+ * null — statt hart abzubrechen (422) wird hier korrigiert (Schritt 1/2).
+ */
+function coerceNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(',', '.').trim());
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+/** Tolerant mit Default-Fallback. */
+function numOr(v: unknown, fallback: number): number {
+  const n = coerceNumber(v);
+  return n ?? fallback;
+}
+
+/**
+ * Tolerante Rep-Range: Array [min,max], String "8-12"/"8–12" oder Einzelwert.
+ * Werte werden geparst (String erlaubt); ungültig -> Fallback [8, 12].
+ */
+function toRepRange(v: unknown): [number, number] {
+  const FALLBACK: [number, number] = [8, 12];
+  if (Array.isArray(v)) {
+    const min = coerceNumber(v[0]);
+    const max = coerceNumber(v[1]);
+    if (min != null && max != null) return min <= max ? [min, max] : [max, min];
+    if (min != null) return [min, min];
+    if (max != null) return [max, max];
+    return FALLBACK;
+  }
+  if (typeof v === 'string') {
+    const m = /(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)/.exec(v);
+    if (m) {
+      const lo = Number(m[1].replace(',', '.'));
+      const hi = Number(m[2].replace(',', '.'));
+      return lo <= hi ? [lo, hi] : [hi, lo];
+    }
+  }
+  const single = coerceNumber(v);
+  return single != null ? [single, single] : FALLBACK;
 }
 
 /**
@@ -254,19 +287,25 @@ function parseCoachPlan(raw: string): NormPlan {
         throw new PlanValidationError(`detailWeeks[${wi}].sessions[${si}].exercises ist leer.`);
       }
 
+      // Kontext für sinnvolle RPE-Defaults: Kalibrierung 7, frühe Wochen 8, sonst 9.
+      const wkIdx = typeof w.weekIndex === 'number' ? w.weekIndex : wi;
+      const isCalibSession = s.type === 'calibration' || (wi === 0 && si === 0);
+      const rpeFallback = isCalibSession ? 7 : wkIdx <= 3 ? 8 : 9;
+
       const exercises: NormExercise[] = exRaw.map((eRaw, ei) => {
         const ctx = `detailWeeks[${wi}].sessions[${si}].exercises[${ei}]`;
         const e = asRecord(eRaw, ctx);
         const ex: NormExercise = {
           name: asString(e.name, `${ctx}.name`),
-          sets: asNumber(e.sets, `${ctx}.sets`),
-          repRange: toRepRange(e.repRange, `${ctx}.repRange`),
-          targetRPE: asNumber(e.targetRPE, `${ctx}.targetRPE`),
-          restSeconds: asNumber(e.restSeconds, `${ctx}.restSeconds`),
+          // Tolerant: String/Default statt hartem 422.
+          sets: Math.max(1, Math.round(numOr(e.sets, 3))),
+          repRange: toRepRange(e.repRange),
+          targetRPE: numOr(e.targetRPE, rpeFallback),
+          restSeconds: Math.max(0, Math.round(numOr(e.restSeconds, 90))),
         };
-        if (typeof e.suggestedLoadKg === 'number' && Number.isFinite(e.suggestedLoadKg)) {
-          ex.suggestedLoadKg = e.suggestedLoadKg;
-        }
+        // suggestedLoadKg optional: tolerant parsen, ungültig/null -> weglassen.
+        const load = coerceNumber(e.suggestedLoadKg);
+        if (load != null) ex.suggestedLoadKg = load;
         if (typeof e.cue === 'string' && e.cue.trim()) ex.cue = e.cue.trim();
         return ex;
       });
@@ -593,6 +632,11 @@ function buildUserPrompt(
   lines.push('- Woche 1, erste Einheit: "type": "calibration".');
   lines.push('- Jede Übung: repRange [min,max], targetRPE, restSeconds, cue; suggestedLoadKg nur wenn sinnvoll, sonst null.');
   lines.push(
+    '- ZAHLENFELDER sind IMMER echte JSON-Zahlen, niemals Strings oder null: ' +
+      'targetRPE (z. B. 8, nicht "8"), sets, restSeconds, repRange [min, max] und ' +
+      'suggestedLoadKg (Zahl oder weglassen/null nur bei Kalibrierung).',
+  );
+  lines.push(
     '- AUFWÄRMSÄTZE NIEMALS als separate Übung ausgeben. Eine Mehrgelenk-Übung ist ' +
       'GENAU EIN exercises-Eintrag (sets = nur die Arbeitssätze). Die übungsspezifischen ' +
       'Aufwärmsätze gehören als kurzer Vorsatz in den cue derselben Übung, z. B.: ' +
@@ -700,6 +744,10 @@ function buildWindowUserPrompt(
   lines.push(
     'Pflichten: detailWeeks = genau die 2 neuen Wochen; je Übung repRange/targetRPE/restSeconds/cue; ' +
       'suggestedLoadKg gesetzt (Progression eingerechnet); keine "calibration".',
+  );
+  lines.push(
+    'Zahlenfelder (targetRPE, sets, restSeconds, repRange, suggestedLoadKg) IMMER als echte ' +
+      'JSON-Zahlen, niemals Strings ("8") oder null.',
   );
   lines.push(
     'Aufwärmsätze NIEMALS als separate Übung — eine Mehrgelenk-Übung ist GENAU EIN ' +
