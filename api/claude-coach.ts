@@ -198,10 +198,13 @@ type CoachInputMode = 'weight_reps' | 'time' | 'cardio' | 'bodyweight_reps';
 function resolveMode(pe: PlannedExercise | undefined, name: string, cue: string): CoachInputMode {
   const m = pe?.inputMode;
   if (m === 'weight_reps' || m === 'time' || m === 'cardio' || m === 'bodyweight_reps') return m;
-  const hay = `${name} ${cue}`;
-  if (/aufwärm|cardio|ergometer|laufband|crosstrainer|crosser|ruderergometer|rudergerät|stepper/i.test(hay)) {
+  // Cardio NUR über den Namen (Gerät / Aufwärmen), nie über den Cue — sonst
+  // markiert der Aufwärmsatz-Text im Cue ("Aufwärmsätze: …") Kraftübungen wie
+  // "Beinpresse (Maschine)" fälschlich als Cardio (identisch zu inputModeService).
+  if (/ergometer|laufband|crosstrainer|crosser|ruderergometer|rudergerät|stepper|fahrrad|aufwärm/i.test(name)) {
     return 'cardio';
   }
+  const hay = `${name} ${cue}`;
   if (
     /plank|planke|unterarmst(?:ü|u)tz|dead.?bug|\bhold\b|isometr/i.test(name) ||
     /\b\d{2,}\s*(?:s\b|sek\b|sekunden\b)/i.test(hay)
