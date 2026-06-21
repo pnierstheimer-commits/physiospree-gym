@@ -24,8 +24,13 @@ export const CARDIO_MACHINES = [
   'Stepper',
 ] as const;
 
-const CARDIO_RE =
-  /aufwärm|cardio|ergometer|laufband|crosstrainer|crosser|ruderergometer|rudergerät|stepper/i;
+// Cardio NUR über den ÜBUNGSNAMEN: ein explizit benanntes Cardio-Gerät oder der
+// Aufwärm-Eintrag (Punkt 0, "Aufwärmen — …"). Bewusst NICHT über den Cue —
+// Aufwärmsatz-Text im Cue ("Aufwärmsätze: 1×10 @ 50% …") darf Kraftübungen wie
+// "Beinpresse (Maschine)" nicht fälschlich als Cardio markieren. "Maschine" ist
+// kein Cardio-Stichwort -> Maschinen-Kraftübungen bleiben weight_reps.
+const CARDIO_NAME_RE =
+  /ergometer|laufband|crosstrainer|crosser|ruderergometer|rudergerät|stepper|fahrrad|aufwärm/i;
 // Zeit: über den Namen (Plank etc.) oder zweistellige Sekundenangaben
 // ("45 Sekunden", "30s") — einstellige Tempo-Cues ("2 s") matchen bewusst nicht.
 const TIME_NAME_RE = /plank|planke|unterarmst(?:ü|u)tz|dead.?bug|\bhold\b|isometr/i;
@@ -43,8 +48,9 @@ export function resolveInputMode(opts: {
   cue?: string | null;
 }): InputMode {
   if (isInputMode(opts.inputMode)) return opts.inputMode;
+  // Cardio nur aus dem Namen (Gerät / Aufwärmen), nie aus dem Cue.
+  if (CARDIO_NAME_RE.test(opts.name)) return 'cardio';
   const hay = `${opts.name} ${opts.cue ?? ''}`;
-  if (CARDIO_RE.test(hay)) return 'cardio';
   if (TIME_NAME_RE.test(opts.name) || TIME_DUR_RE.test(hay)) return 'time';
   const cat = findCatalogExercise(opts.name);
   if ((cat && /körpergewicht/i.test(cat.equipment)) || BODYWEIGHT_RE.test(hay)) {
