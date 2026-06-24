@@ -16,13 +16,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useApp } from '../lib/state';
 import {
-  convertCoachMarkers,
-  evaluateWorkout,
-  type CoachEvaluation,
-  type CoachEvaluationItem,
-  type Verdict,
-} from '../lib/services/coachService';
-import {
   groupExercises,
   parsePrefix,
   type ExerciseGroup,
@@ -34,7 +27,7 @@ import {
   resolveInputMode,
 } from '../lib/services/inputModeService';
 import { ExerciseInfo } from '../components/ExerciseInfo';
-import type { InputMode, Workout, WorkoutExercise, WorkoutSet } from '../shared/types';
+import type { InputMode, WorkoutExercise, WorkoutSet } from '../shared/types';
 import './screens.css';
 
 const RPE_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
@@ -43,14 +36,6 @@ const CIRCUIT_SWITCH_REST = 15;
 const CIRCUIT_ROUND_REST = 60;
 /** Pause zwischen den Sätzen in der Kalibrierung (Sekunden). */
 const CALIBRATION_REST = 60;
-
-const VERDICT_META: Record<Verdict, { label: string; tone: 'green' | 'red' | 'yellow' }> = {
-  in_range: { label: 'Im Ziel', tone: 'green' },
-  above_range: { label: 'Reps am Limit', tone: 'green' },
-  below_range: { label: 'Zu schwer', tone: 'red' },
-  rpe_low: { label: 'Mehr Intensität', tone: 'yellow' },
-  stagnation: { label: 'Stagnation', tone: 'yellow' },
-};
 
 interface SetInput {
   weight: string;
@@ -134,27 +119,6 @@ function formatSetValue(s: WorkoutSet, mode: InputMode): string {
   return `${s.weightKg ?? 0} kg × ${s.reps ?? 0}${rpe}`;
 }
 
-/** Kompakte Ist-Werte einer Übung (Coach-Auswertung). */
-function formatSetsSummary(sets: WorkoutSet[], mode: InputMode = 'weight_reps'): string {
-  if (sets.length === 0) return 'Keine Sätze erfasst';
-  const sorted = [...sets].sort((a, b) => a.setNumber - b.setNumber);
-  if (mode === 'cardio') {
-    const s = sorted[0];
-    return `${s.cardioMinutes ?? 0} min${s.cardioMachine ? ` · ${s.cardioMachine}` : ''}`;
-  }
-  if (mode === 'time') {
-    const secs = sorted.map((s) => `${s.durationSeconds ?? 0}s`).join('/');
-    const rpe = sorted[0].rpe;
-    return `${secs}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
-  }
-  const reps = sorted.map((s) => s.reps ?? 0).join('/');
-  const rpe = sorted[0].rpe;
-  if (mode === 'bodyweight_reps') {
-    return `KG × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
-  }
-  return `${sorted[0].weightKg ?? 0} kg × ${reps}${rpe != null ? ` @ RPE ${rpe}` : ''}`;
-}
-
 /** Ziel-Zeile einer Übung je Modus. */
 function targetText(ev: ExView): string {
   if (ev.mode === 'cardio') return `${ev.targetSets > 1 ? `${ev.targetSets} × ` : ''}Gerät + Minuten`;
@@ -171,30 +135,16 @@ function targetText(ev: ExView): string {
   );
 }
 
-/** Adjustment-Zeile mit Pfeil + Delta. */
-function adjustmentLine(item: CoachEvaluationItem): string {
-  if (item.adjustment === 'maintain' || item.newLoad == null) return '→ Gewicht bleibt';
-  const delta = item.newLoad - item.currentLoad;
-  const sign = delta >= 0 ? '+' : '−';
-  const mag = Math.abs(Math.round(delta * 100) / 100);
-  return item.adjustment === 'increase'
-    ? `↑ Nächste Woche: ${item.newLoad} kg (${sign}${mag})`
-    : `↓ Runter auf ${item.newLoad} kg (${sign}${mag})`;
-}
-
 export function WorkoutScreen() {
-  const { activeWorkout, currentPlan, logSet, completeWorkout, abortWorkout, applyMarkers } =
-    useApp();
+  const { activeWorkout, currentPlan, logSet, completeWorkout, abortWorkout } = useApp();
 
   // Gruppen-basierte Navigation: groupIndex + (für Supersatz/Zirkel) round + pos.
   const [groupIndex, setGroupIndex] = useState(0);
   const [round, setRound] = useState(1);
   const [pos, setPos] = useState(0);
-  const [phase, setPhase] = useState<'train' | 'summary' | 'evaluating' | 'evaluation'>('train');
+  const [phase, setPhase] = useState<'train' | 'summary'>('train');
   const [inputs, setInputs] = useState<Record<string, SetInput>>({});
   const [timer, setTimer] = useState<Timer | null>(null);
-  const [evaluation, setEvaluation] = useState<CoachEvaluation | null>(null);
-  const [evalError, setEvalError] = useState<string | null>(null);
   // Gesamtzeit-Uhr: tickt jede Sekunde, abgeleitet aus startedAt.
   const [nowTs, setNowTs] = useState(() => Date.now());
   useEffect(() => {
@@ -420,108 +370,13 @@ export function WorkoutScreen() {
     }
   };
 
-  // Speichern -> Coach-Auswertung anfordern.
-  const onSave = async () => {
-    if (!currentPlan) {
-      completeWorkout();
-      return;
-    }
-    const snapshot: Workout = {
-      ...activeWorkout,
-      status: 'completed',
-      completedAt: new Date().toISOString(),
-    };
-    setEvalError(null);
-    setPhase('evaluating');
-    try {
-      const result = await evaluateWorkout(snapshot, currentPlan);
-      setEvaluation(result);
-      setPhase('evaluation');
-    } catch (err) {
-      setEvalError(err instanceof Error ? err.message : 'Auswertung fehlgeschlagen.');
-    }
-  };
-
-  const onAcknowledge = () => {
-    if (evaluation) applyMarkers(convertCoachMarkers(evaluation.markers, evaluation.evaluation));
+  // Speichern: Workout abschließen (markiert completed + schreibt
+  // Kalibrierungslasten). Keine automatische Coach-Auswertung mehr — der Coach
+  // ist optional über den Chat erreichbar. completeWorkout entfernt das aktive
+  // Workout, App.tsx routet danach zurück zur Übersicht.
+  const onSave = () => {
     completeWorkout();
   };
-
-  // -------------------------------------------------------------------------
-  // Coach wertet aus (Loading / Fehler)
-  // -------------------------------------------------------------------------
-  if (phase === 'evaluating') {
-    return (
-      <div className="ps-screen">
-        <div className="ps-shell">
-          {evalError ? (
-            <>
-              <div className="ps-plan-title">Auswertung fehlgeschlagen</div>
-              <p className="ps-subtitle">Dein Workout ist erfasst — nur der Coach hat gepatzt.</p>
-              <div className="ps-error-card">
-                <div className="ps-error-title">Fehler</div>
-                {evalError}
-              </div>
-              <div className="ps-actions">
-                <button type="button" className="ps-btn ps-btn-primary" onClick={onSave}>
-                  Nochmal versuchen
-                </button>
-                <button type="button" className="ps-btn ps-btn-ghost" onClick={completeWorkout}>
-                  Ohne Auswertung speichern
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="ps-center">
-              <div className="ps-spinner" aria-hidden="true" />
-              <div className="ps-loading-text">Coach wertet aus …</div>
-              <p className="ps-loading-sub">
-                Deine Sätze werden gegen den Plan geprüft. Das dauert ein paar Sekunden.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Auswertung
-  // -------------------------------------------------------------------------
-  if (phase === 'evaluation' && evaluation) {
-    return (
-      <div className="ps-screen">
-        <div className="ps-shell">
-          <div className="ps-progress-label">Auswertung · RPE {evaluation.overallRPE}/10</div>
-          <p className="ps-coach-msg">{evaluation.coachMessage}</p>
-
-          <div className="ps-evals">
-            {evaluation.evaluation.map((item, i) => {
-              const meta = VERDICT_META[item.verdict];
-              const ev = exViews.find((e) => e.name === item.exerciseName);
-              return (
-                <div key={i} className="ps-eval-card">
-                  <div className="ps-eval-head">
-                    <span className="ps-eval-name">{item.exerciseName}</span>
-                    <span className={`ps-pill ps-pill-${meta.tone}`}>{meta.label}</span>
-                  </div>
-                  {ev && <div className="ps-eval-sets">{formatSetsSummary(ev.we.sets, ev.mode)}</div>}
-                  <div className="ps-eval-adjust">{adjustmentLine(item)}</div>
-                  <p className="ps-eval-rationale">{item.rationale}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="ps-actions">
-            <button type="button" className="ps-btn ps-btn-primary" onClick={onAcknowledge}>
-              Verstanden
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // -------------------------------------------------------------------------
   // Zusammenfassung
