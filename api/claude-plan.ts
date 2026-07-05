@@ -874,7 +874,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const client = new Anthropic();
     const message = await client.messages.create({
       model,
-      max_tokens: 8000,
+      // 16000 gibt sicheren Headroom für die größte Kombi (advanced, 4 Tage,
+      // 2 Detailwochen × 4 Sessions). Bei 8000 wurde der JSON-Block abgeschnitten
+      // (HTTP 422). Der Guard unten meldet ein künftiges Abschneiden klar.
+      max_tokens: 16000,
       // Thinking aus: Die Periodisierungslogik steckt bereits prägnant in den
       // Referenzdateien (SKILL/Segment/exercises). Ohne Thinking bleibt die
       // synchrone Antwortzeit deutlich unter dem Function-Timeout; das ist für
@@ -907,6 +910,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (!raw) {
       sendJson(res, 502, { error: 'upstream_error', message: 'Modell lieferte keinen Text zurück.' });
+      return;
+    }
+
+    // Defensiv: Bei stop_reason 'max_tokens' ist der JSON-Block abgeschnitten.
+    // NICHT parsen — sonst kryptischer JSON.parse-Fehler weiter unten. Stattdessen
+    // klar melden, damit ein künftiges Abschneiden sofort als das erkennbar ist.
+    if (message.stop_reason === 'max_tokens') {
+      const msg = `Plan-Antwort bei max_tokens abgeschnitten (Länge ${raw.length}) — max_tokens erhöhen.`;
+      console.error(`[claude-plan] ${msg}`);
+      sendJson(res, 502, { error: 'plan_truncated', message: msg });
       return;
     }
   } catch (err) {
