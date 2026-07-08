@@ -38,6 +38,7 @@ import type {
 import { generatePlan, parseMarkers } from './services/planService';
 import { ensureScheduledDays } from './services/scheduleService';
 import { requestChatReply, toParsedMarkers } from './services/chatService';
+import { withoutSkippedExercises } from './services/coachService';
 import { applyMarkerToWeeks } from './services/markerService';
 import { applyCalibrationLoads, findCalibrationSession } from './services/calibrationService';
 import { deletePlanRows } from './sync';
@@ -143,6 +144,8 @@ interface AppContextValue {
   startWorkout: (session: PlannedSession) => void;
   /** Speichert/aktualisiert einen Satz der aktiven Übung (per Satznummer). */
   logSet: (exerciseIndex: number, set: WorkoutSet) => void;
+  /** Markiert eine Übung des aktiven Workouts als übersprungen / hebt es auf. */
+  setExerciseSkipped: (exerciseIndex: number, skipped: boolean) => void;
   /** Schließt das aktive Workout ab (→ Historie). */
   completeWorkout: () => void;
   /** Bricht das aktive Workout ab; Teildaten bleiben als 'skipped' erhalten. */
@@ -404,6 +407,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
+  const setExerciseSkipped = useCallback<AppContextValue['setExerciseSkipped']>(
+    (exerciseIndex, skipped) => {
+      update((prev) => {
+        const idx = prev.workouts.findIndex((w) => w.status === 'in_progress');
+        if (idx === -1) return {};
+        const now = new Date().toISOString();
+        const active = prev.workouts[idx];
+        const exercises = active.exercises.map((ex, i) =>
+          i === exerciseIndex ? { ...ex, skipped, updatedAt: now } : ex,
+        );
+        const updated: Workout = { ...active, updatedAt: now, exercises };
+        return { workouts: prev.workouts.map((w, i) => (i === idx ? updated : w)) };
+      });
+    },
+    [update],
+  );
+
   const completeWorkout = useCallback<AppContextValue['completeWorkout']>(() => {
     update((prev) => {
       const idx = prev.workouts.findIndex((w) => w.status === 'in_progress');
@@ -538,7 +558,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const recentWorkouts = state.workouts
           .filter((w) => w.status === 'completed')
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-          .slice(0, 5);
+          .slice(0, 5)
+          // Geskippte Übungen nicht als Leistungsdaten an den Coach-Chat geben.
+          .map(withoutSkippedExercises);
 
         const reply = await requestChatReply({
           messages: [...state.chatMessages, userMsg].slice(-10),
@@ -659,6 +681,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       workoutHistory,
       startWorkout,
       logSet,
+      setExerciseSkipped,
       completeWorkout,
       abortWorkout,
       applyMarkers,
@@ -689,6 +712,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       workoutHistory,
       startWorkout,
       logSet,
+      setExerciseSkipped,
       completeWorkout,
       abortWorkout,
       applyMarkers,

@@ -2727,3 +2727,35 @@
 .ps-intro-start:active {
   border-color: #777;
 }
+
+/* --- Übung überspringen (Workout-Player) --- */
+.ps-skip-btn {
+  align-self: flex-start;
+  margin-top: 16px;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+/* Übersprungen: ausgegraut + durchgestrichen. */
+.ps-skipped-name {
+  text-decoration: line-through;
+  color: hsl(var(--muted-foreground));
+}
+.ps-ex-skipped {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 0;
+  opacity: 0.75;
+}
+.ps-ex-skipped-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ps-skip-undo {
+  align-self: flex-start;
+}
+.ps-group-ex.is-skipped {
+  opacity: 0.6;
+}

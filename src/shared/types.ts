@@ -228,6 +228,14 @@ export interface WorkoutExercise extends Syncable {
   order: number;
   sets: WorkoutSet[];
   notes?: string;
+  /**
+   * Bewusst übersprungen (ein Tap im Player, direkt). Eindeutig unterscheidbar
+   * von "erledigt" (sets.length > 0) und "offen" (sets leer, skipped falsy).
+   * Geskippte Übungen zählen NICHT als Leistungsdaten für die Coach-Auswertung
+   * und lassen die Progressionskette unberührt — sie werden vor dem Payload
+   * herausgefiltert. Default false; persistiert in gym_workout_exercises.skipped.
+   */
+  skipped?: boolean;
 }
 
 /** Ein einzelner geloggter Satz — kleinste Einheit des Datenmodells. */

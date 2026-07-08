@@ -319,6 +319,14 @@ Satz 3: ...
    Nicht weil du versagt hast — weil du es komplett durchziehen sollst."
 → Bei Abbruch wegen Schmerz: → Rot-Status-Prüfung, ggf. Übung tauschen (`EXERCISE_SWAP`)
 
+**Fall 6 — Übung übersprungen (bewusst geskippt):**
+→ Übung erscheint NICHT in der Wertung. Keine Lastanpassung, keine
+  Progressionsprüfung, keine Rep-/RPE-Interpretation.
+→ Die Progressionskette der Übung bleibt unberührt: eine übersprungene
+  Einheit zählt weder als Fortschritt noch als Rückschritt.
+→ Kein Vorwurf. Wenn überhaupt erwähnt, dann neutral und knapp:
+  "Beinpresse heute übersprungen. Keine Wertung. Nächstes Mal wieder dran."
+
 ### Output-Format Auswertung
 ```
 AUSWERTUNG — [Datum] | [Split: OK/UK/GK]

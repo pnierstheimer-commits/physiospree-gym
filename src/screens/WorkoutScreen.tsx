@@ -66,6 +66,8 @@ interface ExView {
   mode: InputMode;
   /** Zielzeit in Sekunden ('time'-Modus, aus dem Cue), sonst null. */
   targetSeconds: number | null;
+  /** Bewusst übersprungen. */
+  skipped: boolean;
 }
 
 /** 'pos' = Zirkel-Wechsel (nächste Übung), 'round' = nächste Runde, null = klassische Pause. */
@@ -136,7 +138,8 @@ function targetText(ev: ExView): string {
 }
 
 export function WorkoutScreen() {
-  const { activeWorkout, currentPlan, logSet, completeWorkout, abortWorkout } = useApp();
+  const { activeWorkout, currentPlan, logSet, setExerciseSkipped, completeWorkout, abortWorkout } =
+    useApp();
 
   // Gruppen-basierte Navigation: groupIndex + (für Supersatz/Zirkel) round + pos.
   const [groupIndex, setGroupIndex] = useState(0);
@@ -218,6 +221,7 @@ export function WorkoutScreen() {
       suggestedLoadKg: pe?.suggestedLoadKg ?? null,
       mode,
       targetSeconds,
+      skipped: we.skipped ?? false,
     };
   });
 
@@ -339,15 +343,19 @@ export function WorkoutScreen() {
     setTimer(null);
   };
 
-  /** Ganze Gruppe fertig = alle Übungen über alle Runden komplett. */
+  /** Ganze Gruppe fertig = jede Übung über alle Runden komplett ODER übersprungen. */
   const groupComplete = (g: ExerciseGroup): boolean => {
     const rounds = roundsOf(g);
     return g.indices.every((idx) => {
       const ev = exViews[idx];
+      if (ev.skipped) return true; // übersprungen zählt als erledigt
       for (let r = 1; r <= rounds; r++) if (!setComplete(valueOf(ev, r), ev.mode)) return false;
       return true;
     });
   };
+
+  // Übersprungen ⇄ zurück, solange das Workout läuft (Schutz vor Fehltap).
+  const toggleSkip = (ev: ExView) => setExerciseSkipped(ev.index, !ev.skipped);
 
   const resetGroupState = () => {
     setRound(1);
@@ -399,8 +407,11 @@ export function WorkoutScreen() {
               const sets = [...ev.we.sets].sort((a, b) => a.setNumber - b.setNumber);
               return (
                 <div key={ev.we.id} className="ps-sum-ex">
-                  <div className="ps-day-title">{ev.name}</div>
-                  {sets.length === 0 ? (
+                  <div className="ps-day-title">
+                    <span className={ev.skipped ? 'ps-skipped-name' : undefined}>{ev.name}</span>
+                    {ev.skipped && <span className="ps-pill ps-pill-muted">übersprungen</span>}
+                  </div>
+                  {ev.skipped ? null : sets.length === 0 ? (
                     <div className="ps-ex-cue">Keine Sätze erfasst.</div>
                   ) : (
                     <div className="ps-sum-sets">
@@ -604,6 +615,19 @@ export function WorkoutScreen() {
           // -------- Klassischer Satz (mode-abhängige Eingabefelder) --------
           (() => {
             const ev = exViews[group.indices[0]];
+            if (ev.skipped) {
+              return (
+                <div className="ps-ex-skipped">
+                  <div className="ps-ex-skipped-head">
+                    <span className="ps-ex-focus-name ps-skipped-name">{ev.name}</span>
+                    <span className="ps-pill ps-pill-muted">übersprungen</span>
+                  </div>
+                  <button type="button" className="ps-btn ps-btn-ghost ps-skip-undo" onClick={() => toggleSkip(ev)}>
+                    Rückgängig
+                  </button>
+                </div>
+              );
+            }
             return (
               <>
                 <ExerciseInfo name={ev.name} nameClass="ps-ex-focus-name" />
@@ -626,6 +650,14 @@ export function WorkoutScreen() {
                     );
                   })}
                 </div>
+
+                <button
+                  type="button"
+                  className="ps-btn ps-btn-ghost ps-btn-quiet ps-skip-btn"
+                  onClick={() => toggleSkip(ev)}
+                >
+                  Übung überspringen
+                </button>
               </>
             );
           })()
@@ -636,51 +668,72 @@ export function WorkoutScreen() {
             {group.indices.map((idx, p) => {
               const gev = exViews[idx];
               const v = valueOf(gev, round);
-              const done = setComplete(v);
+              const done = gev.skipped || setComplete(v);
               const isActive = p === pos && !done && !timer?.advance;
               const isWaiting = !isActive && !done;
               return (
                 <div
                   key={gev.we.id}
-                  className={`ps-group-ex${isActive ? ' is-active' : ''}${isWaiting ? ' is-waiting' : ''}${done ? ' is-done' : ''}`}
+                  className={`ps-group-ex${isActive ? ' is-active' : ''}${isWaiting ? ' is-waiting' : ''}${done ? ' is-done' : ''}${gev.skipped ? ' is-skipped' : ''}`}
                 >
                   <ExerciseInfo
                     name={gev.name}
-                    nameClass="ps-group-ex-name"
+                    nameClass={`ps-group-ex-name${gev.skipped ? ' ps-skipped-name' : ''}`}
                     badge={
                       <span className="ps-group-ex-badge">
                         {group.label}
                         {p + 1}
                       </span>
                     }
-                    trailing={done ? <span className="ps-set-check">✓</span> : null}
+                    trailing={
+                      gev.skipped ? (
+                        <span className="ps-pill ps-pill-muted">übersprungen</span>
+                      ) : done ? (
+                        <span className="ps-set-check">✓</span>
+                      ) : null
+                    }
                   />
-                  <div className="ps-group-ex-target">{targetText(gev)}</div>
-                  <div className="ps-set-inputs">
-                    <label className="ps-field">
-                      <span className="ps-field-label">Gewicht (kg)</span>
-                      <input
-                        className="ps-input"
-                        type="number"
-                        inputMode="decimal"
-                        value={v.weight}
-                        disabled={!isActive}
-                        onChange={(e) => onRoundSet(gev, p, { weight: e.target.value })}
-                      />
-                    </label>
-                    <label className="ps-field">
-                      <span className="ps-field-label">Reps</span>
-                      <input
-                        className="ps-input"
-                        type="number"
-                        inputMode="numeric"
-                        value={v.reps}
-                        disabled={!isActive}
-                        onChange={(e) => onRoundSet(gev, p, { reps: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                  {renderRpe(gev, round, !isActive, (r) => onRoundSet(gev, p, { rpe: r }))}
+                  {gev.skipped ? (
+                    <button type="button" className="ps-btn ps-btn-ghost ps-skip-undo" onClick={() => toggleSkip(gev)}>
+                      Rückgängig
+                    </button>
+                  ) : (
+                    <>
+                      <div className="ps-group-ex-target">{targetText(gev)}</div>
+                      <div className="ps-set-inputs">
+                        <label className="ps-field">
+                          <span className="ps-field-label">Gewicht (kg)</span>
+                          <input
+                            className="ps-input"
+                            type="number"
+                            inputMode="decimal"
+                            value={v.weight}
+                            disabled={!isActive}
+                            onChange={(e) => onRoundSet(gev, p, { weight: e.target.value })}
+                          />
+                        </label>
+                        <label className="ps-field">
+                          <span className="ps-field-label">Reps</span>
+                          <input
+                            className="ps-input"
+                            type="number"
+                            inputMode="numeric"
+                            value={v.reps}
+                            disabled={!isActive}
+                            onChange={(e) => onRoundSet(gev, p, { reps: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                      {renderRpe(gev, round, !isActive, (r) => onRoundSet(gev, p, { rpe: r }))}
+                      <button
+                        type="button"
+                        className="ps-btn ps-btn-ghost ps-btn-quiet ps-skip-btn"
+                        onClick={() => toggleSkip(gev)}
+                      >
+                        Übung überspringen
+                      </button>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -716,7 +769,9 @@ export function WorkoutScreen() {
           <button
             type="button"
             className="ps-btn ps-btn-primary"
-            disabled={!canAdvance}
+            // "Workout abschließen" ist JEDERZEIT möglich (auch bei offenen/
+            // geskippten Übungen); nur "Weiter" braucht eine fertige Gruppe.
+            disabled={!isLastGroup && !canAdvance}
             onClick={goNext}
           >
             {isLastGroup ? 'Workout abschließen' : 'Weiter'}

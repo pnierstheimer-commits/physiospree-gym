@@ -11,6 +11,17 @@ import type { ParsedMarker, ParsedMarkerKind, PlanResponse, Workout } from '../.
 
 const COACH_ENDPOINT = '/api/claude-coach';
 
+/**
+ * Entfernt bewusst übersprungene Übungen aus einem Workout, bevor es an den
+ * Coach geht. Geskippte Übungen sind KEINE Leistungsdaten: keine Lastanpassung,
+ * keine Rep-/RPE-Wertung, und die "2× in Folge"-Progressionskette bleibt
+ * unberührt (sie taucht schlicht nicht im Payload auf). Rein defensiv — der
+ * Aufrufer sendet das gefilterte Workout.
+ */
+export function withoutSkippedExercises(workout: Workout): Workout {
+  return { ...workout, exercises: workout.exercises.filter((e) => !e.skipped) };
+}
+
 // ---------------------------------------------------------------------------
 // Antwort-Vertrag (gleiche Struktur wie api/claude-coach.ts)
 // ---------------------------------------------------------------------------
@@ -87,7 +98,8 @@ export async function evaluateWorkout(
     res = await fetch(COACH_ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ workout, plan }),
+      // Geskippte Übungen NICHT als Leistungsdaten senden.
+      body: JSON.stringify({ workout: withoutSkippedExercises(workout), plan }),
     });
   } catch (err) {
     throw new Error(`Netzwerkfehler bei der Auswertung: ${(err as Error).message}`, { cause: err });

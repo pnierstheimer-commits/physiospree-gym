@@ -216,6 +216,7 @@ function exerciseToRow(e: WorkoutExercise, userId: string): Row {
     exercise_id: e.exerciseId,
     order: e.order,
     notes: e.notes ?? null,
+    skipped: e.skipped ?? false,
     updated_at: e.updatedAt,
     deleted_at: e.deletedAt ?? null,
   };
@@ -279,6 +280,7 @@ function rowsToWorkouts(woRows: Row[], exRows: Row[], setRows: Row[]): Workout[]
       order: num(er.order),
       sets: (setsByEx.get(id) ?? []).sort((a, b) => a.setNumber - b.setNumber),
       notes: typeof er.notes === 'string' ? er.notes : undefined,
+      skipped: bool(er.skipped),
     };
     const arr = exByWorkout.get(ex.workoutId) ?? [];
     arr.push(ex);

@@ -7,6 +7,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import type { PlanResponse, UserProfile, Workout } from '../../shared/types';
+import { withoutSkippedExercises } from './coachService';
 
 const PLAN_ENDPOINT = '/api/claude-plan';
 
@@ -82,7 +83,11 @@ export async function requestNextWindow(
   const body = {
     profile: reconstructProfile(plan),
     existingPlan: plan,
-    completedWorkouts: workoutHistory.filter((w) => w.status === 'completed'),
+    // Geskippte Übungen HERAUSFILTERN: sie sind keine Leistungsdaten und dürfen
+    // die Progression (2× in Folge) nicht beeinflussen.
+    completedWorkouts: workoutHistory
+      .filter((w) => w.status === 'completed')
+      .map(withoutSkippedExercises),
   };
 
   let res: Response;
