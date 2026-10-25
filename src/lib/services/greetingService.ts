@@ -4,7 +4,12 @@
  * Coach-Logik gehört in den Service-Layer, nicht in die UI (Regel 3).
  *
  * Priorität (erste zutreffende Regel gewinnt): A Pause > B harte Woche >
- * C Meilenstein > D regelmäßige Nachfrage > E heutige Einheit (Standard).
+ * C Meilenstein > D offene Tür > E heutige Einheit (Standard).
+ *
+ * Ton (siehe api/prompt/sound.md): Die Begrüßung ist eine OFFENE TÜR, kein
+ * Formular. Niemals Schlaf, Energie, DOMS oder Schmerz abfragen — nur ein
+ * Angebot ("Wenn was ist, sag Bescheid"). Weiche Infos kommen ausschließlich
+ * dann, wenn der Nutzer sie von sich aus im Chat nennt.
  */
 
 import type { CoachAction, PlannedSession, Workout } from '../../shared/types';
@@ -59,7 +64,10 @@ export function computeCoachGreeting(input: GreetingInput): CoachGreeting {
   if (completed.length > 0) {
     const days = Math.floor((nowMs - new Date(completed[0].date).getTime()) / DAY_MS);
     if (days >= 4) {
-      return { kind: 'pause', text: `${hi}${days} Tage seit dem letzten Training. Alles klar bei dir?` };
+      return {
+        kind: 'pause',
+        text: `${hi}${days} Tage seit dem letzten Training. Wenn was war, sag Bescheid.`,
+      };
     }
   }
 
@@ -74,7 +82,9 @@ export function computeCoachGreeting(input: GreetingInput): CoachGreeting {
       );
     if (rpes.length > 0) {
       const avg = rpes.reduce((a, b) => a + b, 0) / rpes.length;
-      if (avg >= 9) return { kind: 'hard_week', text: 'Intensive Woche hinter dir. Wie fühlst du dich?' };
+      if (avg >= 9) {
+        return { kind: 'hard_week', text: 'Intensive Woche hinter dir. Wenn was ist, sag Bescheid.' };
+      }
     }
   }
 
@@ -92,9 +102,14 @@ export function computeCoachGreeting(input: GreetingInput): CoachGreeting {
     };
   }
 
-  // D) Regelmäßige Nachfrage: alle 5 abgeschlossenen Einheiten.
+  // D) Offene Tür: alle 5 abgeschlossenen Einheiten ein Angebot — keine Abfrage.
   if (completed.length > 0 && completed.length % 5 === 0) {
-    return { kind: 'checkin', text: 'Alles fit? Schlaf, Energie, irgendwo Zwicken?' };
+    return {
+      kind: 'checkin',
+      text: name
+        ? `${name}, läuft. Wenn was ist, sag Bescheid.`
+        : 'Läuft. Wenn was ist, sag Bescheid.',
+    };
   }
 
   // E) Standard: heutige Einheit (Split + erste Übung + Gewicht).

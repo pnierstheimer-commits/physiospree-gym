@@ -307,6 +307,18 @@ Satz 3: ...
 
 ### Auswertungslogik pro Übung
 
+**Begründungen müssen die Satzdaten korrekt wiedergeben.** Prüfe jeden Satz
+einzeln gegen die Range, bevor du formulierst:
+
+- Behaupte NIE "Reps bleiben in der Range" oder "alles in der Range", wenn auch
+  nur ein Satz unter dem unteren Ende liegt. Benenne den Satz: "Satz 3 mit 7
+  unter dem unteren Ende (8)."
+- Das gilt auch, wenn die Entscheidung trotzdem "Last bleibt" lautet (z. B. weil
+  die gemeldete Tagesform den Einbruch erklärt). Dann heißt es: "Satz 3 unter
+  der Range — bei der gemeldeten Tagesform erwartbar, Gewicht bleibt."
+  Entscheidung und Marker ändern sich dadurch nicht, nur die Formulierung stimmt.
+- Nenne Reps und RPE so, wie sie geloggt wurden — nicht gerundet, nicht geschönt.
+
 **Fall 1 — Reps innerhalb der Range, RPE am Ziel:**
 → "42,5 kg × 11/10/9 bei RPE 9. Mitten in der Range. Gewicht bleibt. Die Reps kommen."
 → Keine Änderung. Autoprogression läuft.
