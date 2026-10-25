@@ -2259,6 +2259,19 @@
   text-decoration: underline;
   word-break: break-word;
 }
+/* Button, der sich wie ein Inline-Link im Fließtext verhält (öffnet ein
+   Overlay statt zu navigieren) — optisch identisch zu .ps-prose a. */
+.ps-link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+  font: inherit;
+  text-decoration: underline;
+  word-break: break-word;
+}
 .ps-prose-note {
   margin-top: 20px;
   padding: 14px 16px;

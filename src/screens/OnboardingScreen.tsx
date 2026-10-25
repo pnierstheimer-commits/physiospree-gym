@@ -13,6 +13,7 @@ import { useApp } from '../lib/state';
 import type { Equipment, ExperienceLevel, Goal, UserProfile } from '../shared/types';
 import { AGE_LIMITS } from '../shared/constants';
 import { DisclaimerGate } from '../components/DisclaimerGate';
+import { LegalScreen } from './legal/LegalScreen';
 import './screens.css';
 
 const TOTAL_STEPS = 7;
@@ -145,6 +146,10 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const [why, setWhy] = useState('');
   // Schritt 2: Art.-9-Einwilligung (Gesundheitsdaten) — Pflicht
   const [art9, setArt9] = useState(false);
+  // Datenschutzerklärung aus dem Einwilligungstext heraus, als Overlay. Early
+  // Return statt Navigation über App.tsx: der Wizard bleibt montiert, Eingaben
+  // und Schritt gehen beim Zurück nicht verloren (wie bei DisclaimerGate).
+  const [showPrivacy, setShowPrivacy] = useState(false);
   // weitere Schritte
   const [goal, setGoal] = useState<Goal | null>(null);
   const [experience, setExperience] = useState<ExperienceLevel | null>(null);
@@ -167,6 +172,12 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
         onEdit={clearPlan}
       />
     );
+  }
+
+  // Datenschutzerklärung als Vollbild-Overlay; Zurück führt in den Wizard an
+  // dieselbe Stelle, weil dieser Screen montiert bleibt.
+  if (showPrivacy) {
+    return <LegalScreen page="datenschutz" onBack={() => setShowPrivacy(false)} />;
   }
 
   // Einmaliger Haftungs-/Gesundheitshinweis: erscheint nach „Plan erstellen",
@@ -344,6 +355,19 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
                 nicht weiter — außer an die KI (Anthropic/Claude), die deinen
                 Plan und deine Coach-Antworten berechnet.
               </p>
+              <p>
+                Anthropic PBC sitzt in den USA. Deine Gesundheitsdaten verlassen
+                dafür die EU, und in den USA besteht kein Rechtsschutz, der dem
+                europäischen gleichwertig ist. Einzelheiten stehen in der{' '}
+                <button
+                  type="button"
+                  className="ps-link"
+                  onClick={() => setShowPrivacy(true)}
+                >
+                  Datenschutzerklärung
+                </button>
+                .
+              </p>
             </div>
             <label className="ps-disc-check">
               <input
@@ -352,8 +376,16 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
                 onChange={(e) => setArt9(e.target.checked)}
               />
               <span>
-                Ich willige ausdrücklich in die Verarbeitung meiner
-                gesundheitsbezogenen Daten ein (Art. 9 Abs. 2 lit. a DSGVO).
+                Ich willige ein, dass meine Gesundheitsdaten — Angaben zu
+                Trainingszustand, Belastbarkeit, Beschwerden und Schmerzen sowie
+                meine Trainingsprotokolle — verarbeitet werden, um meinen
+                Trainingsplan zu erstellen und fortzuschreiben (Art. 9 Abs. 2
+                lit. a DSGVO). Mir ist bekannt, dass diese Daten dafür an einen
+                KI-Dienstleister in den USA (Anthropic PBC) übermittelt werden
+                und dass in den USA kein dem europäischen Recht gleichwertiger
+                Rechtsschutz besteht (Art. 49 Abs. 1 lit. a DSGVO). Ich kann
+                diese Einwilligung jederzeit mit Wirkung für die Zukunft
+                widerrufen.
               </span>
             </label>
             <div className="ps-actions">
