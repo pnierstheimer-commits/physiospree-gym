@@ -65,7 +65,7 @@ export function LegalDatenschutz() {
       </p>
 
       <p className="ps-prose-note">
-        Die App verwendet keine Tracking-Cookies. Mindestalter: 15 Jahre.
+        Die App verwendet keine Tracking-Cookies. Mindestalter: 16 Jahre.
       </p>
     </div>
   );
