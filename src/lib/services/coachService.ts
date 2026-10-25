@@ -7,7 +7,13 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import type { ParsedMarker, ParsedMarkerKind, PlanResponse, Workout } from '../../shared/types';
+import type {
+  ExperienceLevel,
+  ParsedMarker,
+  ParsedMarkerKind,
+  PlanResponse,
+  Workout,
+} from '../../shared/types';
 
 const COACH_ENDPOINT = '/api/claude-coach';
 
@@ -26,7 +32,14 @@ export function withoutSkippedExercises(workout: Workout): Workout {
 // Antwort-Vertrag (gleiche Struktur wie api/claude-coach.ts)
 // ---------------------------------------------------------------------------
 
-export type Verdict = 'in_range' | 'above_range' | 'below_range' | 'rpe_low' | 'stagnation';
+export type Verdict =
+  | 'in_range'
+  | 'above_range'
+  | 'below_range'
+  | 'rpe_low'
+  | 'stagnation'
+  /** Abgebrochen (Schmerz/Stopp) — keine Wertung, keine Lastanpassung. */
+  | 'stopped';
 export type Adjustment = 'maintain' | 'increase' | 'decrease';
 
 export interface CoachEvaluationItem {
@@ -85,21 +98,48 @@ function isCoachEvaluation(value: unknown): value is CoachEvaluation {
   );
 }
 
+/** Wie viele frühere Einheiten mitgeschickt werden (für "2 in Folge"). */
+const HISTORY_LIMIT = 6;
+
+export interface EvaluateOptions {
+  /** Alle bisherigen Workouts; es werden nur die letzten abgeschlossenen gesendet. */
+  history?: Workout[];
+  /** Trainingserfahrung für den Level-RPE-Cap. */
+  experience?: ExperienceLevel | null;
+}
+
 /**
  * Wertet ein abgeschlossenes Workout über die serverseitige Coach-Route aus.
  * Wirft bei jedem Fehler eine klare `Error` — scheitert nie stumm.
+ *
+ * `history` liefert die Grundlage für die "2 Einheiten in Folge"-Regel: ohne
+ * sie darf der Coach keine Progression behaupten. Geskippte Übungen werden
+ * auch hier herausgefiltert — eine übersprungene Einheit zählt weder als
+ * Fortschritt noch als Rückschritt.
  */
 export async function evaluateWorkout(
   workout: Workout,
   plan: PlanResponse,
+  opts: EvaluateOptions = {},
 ): Promise<CoachEvaluation> {
+  const history = (opts.history ?? [])
+    .filter((w) => w.status === 'completed' && w.id !== workout.id)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, HISTORY_LIMIT)
+    .map(withoutSkippedExercises);
+
   let res: Response;
   try {
     res = await fetch(COACH_ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       // Geskippte Übungen NICHT als Leistungsdaten senden.
-      body: JSON.stringify({ workout: withoutSkippedExercises(workout), plan }),
+      body: JSON.stringify({
+        workout: withoutSkippedExercises(workout),
+        plan,
+        history,
+        experience: opts.experience ?? undefined,
+      }),
     });
   } catch (err) {
     throw new Error(`Netzwerkfehler bei der Auswertung: ${(err as Error).message}`, { cause: err });

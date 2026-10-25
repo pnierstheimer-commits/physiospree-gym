@@ -41,10 +41,17 @@ Zusätzlich immer laden:
 
 ## Schritt 1: Status bestimmen (Grün / Gelb / Rot)
 
-Prüfe vor jeder Einheit oder Plananpassung.
+**Wird NICHT abgefragt.** Es gibt kein Check-in vor dem Training und keine
+Pflicht-Bewertung danach. Der Chat ist der einzige Kanal für weiche Infos
+(Tagesform, Schmerz, "muss früher weg").
+
+Der Status wird nur dann bestimmt, wenn der Klient von sich aus etwas nennt.
+Fragst du Schlaf, Energie oder DOMS nicht ab, ist der Status implizit **GRÜN** —
+die geplante Einheit läuft. Die Kriterien unten sind das Raster, mit dem du eine
+freiwillige Meldung einordnest, keine Checkliste zum Abarbeiten.
 
 ### GRÜN — Bereit für geplante Belastung
-Alle Bedingungen erfüllt:
+Standardfall (nichts gemeldet) oder alle Bedingungen erfüllt:
 - Schlaf stabil (≥6/10)
 - Stimmung stabil (≥5/10)
 - Kein relevanter Muskelkater/DOMS (≤4/10)
@@ -55,15 +62,18 @@ Alle Bedingungen erfüllt:
 → Geplante Einheit durchführen. Progression erlaubt.
 
 ### GELB — Warnsignale
-Mindestens ein Faktor negativ:
+Nur relevant, wenn der Klient es im Chat anspricht. Mindestens ein Faktor negativ:
 - Schlaf <6/10 oder Stimmung <5/10
 - DOMS >4/10 in Zielmuskulatur
 - RPE letzte Einheit ≥2 über Plan
 - Leichter Schmerzhinweis (1–3/10)
 - Unvollständiges Logbuch (letzte 2 Einheiten fehlen)
 
-→ Volumen reduzieren (−1 Satz/Übung oder −1 Übung). Gewichte beibehalten.
-  Keine Progression diese Einheit. Kein Deload nötig, nur Tagesdosisreduktion.
+→ Volumen reduzieren (−1 Satz/Übung oder −1 Übung) via `SESSION_ADJUSTMENT`.
+  **Gewichte bleiben — Tagesform wirkt NIE automatisch auf die Last.** Eine
+  Lastsenkung braucht einen eigenen Grund aus den Satzdaten (Reps unter Range
+  bei Ziel-RPE). Keine Progression diese Einheit. Kein Deload nötig, nur
+  Tagesdosisreduktion.
 
 ### ROT — Nicht bereit
 Mindestens ein Faktor kritisch:
@@ -348,7 +358,7 @@ Nächste Einheit: [Datum] — [was sich ändert oder gleich bleibt]
 | Marker | Trigger | Payload |
 |--------|---------|---------|
 | `LOAD_ADJUSTMENT:{exerciseId, delta, reason}` | 2× in Folge alle Sätze ≥ oberes Range-Ende bei Ziel-RPE, oder Reps < unteres Ende | Lastanpassung in kg |
-| `SESSION_ADJUSTMENT:{date, volumeChange, reason}` | Gelb-Status | z.B. `volumeChange: -1_set_per_exercise` |
+| `SESSION_ADJUSTMENT:{date, volumeChange, reason}` | Gelb-Status — nur wenn der Klient die Tagesform im Chat meldet (nie automatisch); wirkt auf Volumen, nie auf Last | z.B. `volumeChange: -1_set_per_exercise` |
 | `DELOAD:{startDate, duration, volumeReduction, reason}` | Blockende oder reaktiv | z.B. `volumeReduction: 0.6` |
 | `PHASE_SHIFT:{fromBlock, toBlock, changes}` | Blockwechsel | Parameteränderungen |
 | `EXERCISE_SWAP:{exerciseId, newExerciseId, reason}` | Schmerz, Gerät besetzt | Alternative aus gleicher Familie |

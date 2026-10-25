@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type {
+  ExperienceLevel,
   Goal,
   PlannedExercise,
   PlannedSession,
@@ -33,7 +34,17 @@ export const config = { runtime: 'nodejs', maxDuration: 60 };
 // Antwort-Vertrag (inline, da types.ts geschützt)
 // ---------------------------------------------------------------------------
 
-type Verdict = 'in_range' | 'above_range' | 'below_range' | 'rpe_low' | 'stagnation';
+/**
+ * 'stopped' = Übung abgebrochen/nicht gewertet (Schmerz, Stopp-Signal). Kein
+ * normales Urteil, keine Lastwertung — dafür gibt es sonst keinen Zustand.
+ */
+type Verdict =
+  | 'in_range'
+  | 'above_range'
+  | 'below_range'
+  | 'rpe_low'
+  | 'stagnation'
+  | 'stopped';
 type Adjustment = 'maintain' | 'increase' | 'decrease';
 
 interface CoachEvaluationItem {
@@ -100,6 +111,19 @@ const SEGMENT_LABEL: Record<CoachSegment, string> = {
   strength: 'Maximalkraft',
   endurance: 'Kraftausdauer',
 };
+
+const EXPERIENCE_LABEL: Record<ExperienceLevel, string> = {
+  beginner: 'Beginner',
+  intermediate: 'Intermediate',
+  advanced: 'Advanced',
+};
+
+/**
+ * Wie viele frühere Einheiten je Übung der Coach braucht. Die "2 Einheiten in
+ * Folge"-Regel vergleicht die aktuelle Einheit mit der vorherigen — zwei
+ * Vorgänger geben genug Kontext (Streak + Stagnation), mehr ist Ballast.
+ */
+const HISTORY_SESSIONS_PER_EXERCISE = 2;
 
 function goalToSegment(goal: Goal): CoachSegment {
   switch (goal) {
@@ -187,6 +211,19 @@ const COACH_RULES = `# Verbindliche Regeln für diese Auswertung
   sag an, dass in der nächsten Einheit nachjustiert wird.
 - delta eines LOAD_ADJUSTMENT ist dieselbe eine Stufe (+2,5 / −2,5).
 
+## Abbruch / Schmerz
+- Wurde eine Übung wegen Schmerz oder einem anderen Stopp-Signal abgebrochen,
+  ist das verdict \`stopped\` — NICHT in_range/below_range o. Ä.
+- Bei \`stopped\`: adjustment IMMER "maintain", KEIN newLoad, KEINE Rep-/RPE-
+  Wertung, KEIN LOAD_ADJUSTMENT. Die Übung wird nicht bewertet, nur versorgt
+  (in der Regel \`EXERCISE_SWAP\`).
+
+## Progression nur mit echter Historie
+- "2 Einheiten in Folge" darfst du NUR behaupten, wenn die übergebene Historie
+  das belegt. Ohne passende Vorgänger-Einheit: keine Progression, keine
+  "zweite Woche in Folge"-Formulierung — dann ist die Einheit die Baseline.
+- Erfinde niemals Vorgeschichte aus dem Einheits- oder Übungsnamen.
+
 ## RPE-Obergrenze (Level-/Phasen-Schutz)
 - Das je Übung angegebene RPE-Ziel ist eine OBERGRENZE, kein Mindestwert.
   Rate NIEMALS, darüber hinauszugehen.
@@ -228,7 +265,7 @@ const OUTPUT_SCHEMA = `{
   "evaluation": [
     {
       "exerciseName": "Brustpresse",
-      "verdict": "in_range | above_range | below_range | rpe_low | stagnation",
+      "verdict": "in_range | above_range | below_range | rpe_low | stagnation | stopped",
       "currentLoad": 40,
       "adjustment": "maintain | increase | decrease",
       "newLoad": 42.5,
@@ -289,6 +326,50 @@ function formatReps(range: [number, number]): string {
   return range[0] === range[1] ? `${range[0]}` : `${range[0]}–${range[1]}`;
 }
 
+/** Kompakte Satzliste einer früheren Einheit: "40kg×12@9, 40kg×12@9". */
+function formatHistorySets(we: WorkoutExercise): string {
+  return [...we.sets]
+    .sort((a, b) => a.setNumber - b.setNumber)
+    .map((s) => {
+      if (typeof s.cardioMinutes === 'number') return `${s.cardioMinutes}min`;
+      if (typeof s.durationSeconds === 'number') return `${s.durationSeconds}s@${s.rpe ?? '-'}`;
+      return `${s.weightKg ?? 0}kg×${s.reps ?? 0}@${s.rpe ?? '-'}`;
+    })
+    .join(', ');
+}
+
+/** Kurzes Datum "15.06." für die Historie. */
+function shortDate(iso: string | undefined): string {
+  const ms = Date.parse(iso ?? '');
+  if (Number.isNaN(ms)) return '—';
+  const d = new Date(ms);
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.`;
+}
+
+/**
+ * Frühere Einheiten DERSELBEN Übung (Match über den Namen, da exerciseId ein
+ * Platzhalter ist), neueste zuerst, maximal HISTORY_SESSIONS_PER_EXERCISE.
+ * Geskippte Übungen sind im Payload bereits entfernt und tauchen hier nicht
+ * auf — eine übersprungene Einheit unterbricht die Kette also weder positiv
+ * noch negativ.
+ */
+function historyForExercise(name: string, history: Workout[]): string[] {
+  const rows: { date: string; sets: string }[] = [];
+  const sorted = [...history].sort(
+    (a, b) => Date.parse(b.date ?? '') - Date.parse(a.date ?? ''),
+  );
+  for (const wo of sorted) {
+    for (const we of wo.exercises) {
+      if (splitName(we.notes) !== name) continue;
+      if (we.sets.length === 0) continue;
+      rows.push({ date: shortDate(wo.date), sets: formatHistorySets(we) });
+      break;
+    }
+    if (rows.length >= HISTORY_SESSIONS_PER_EXERCISE) break;
+  }
+  return rows.map((r) => `  ${r.date} ${r.sets}`);
+}
+
 function buildUserPrompt(
   workout: Workout,
   segment: CoachSegment,
@@ -296,6 +377,8 @@ function buildUserPrompt(
   weekIndex: number | null,
   isCalibration: boolean,
   plannedExercises: PlannedExercise[],
+  history: Workout[],
+  experience: ExperienceLevel | null,
 ): string {
   const lines: string[] = [];
   lines.push('AUSWERTUNG DER ABGESCHLOSSENEN EINHEIT');
@@ -306,14 +389,25 @@ function buildUserPrompt(
   );
   lines.push(`Einheit: ${workout.name}${isCalibration ? ' (Kalibrierung)' : ''}`);
 
-  // Level-/Phasen-Schutz: Das RPE-Ziel des Plans kodiert bereits das Level
-  // (hypertrophy.md: "Beginner Wo 1–4: RPE 7 statt 9–10"). Es ist eine
-  // Obergrenze — der Coach darf nie zum Überschreiten raten.
+  // Level-Cap: primär aus dem echten experience-Feld, sonst aus dem plan-seitigen
+  // targetRPE (das Level ist dort mitkodiert) als Fallback.
   const rpeTargets = plannedExercises
     .map((pe) => pe.targetRPE)
     .filter((r): r is number => typeof r === 'number' && r > 0);
-  if (rpeTargets.length > 0) {
-    const maxRpe = Math.max(...rpeTargets);
+  const maxRpe = rpeTargets.length > 0 ? Math.max(...rpeTargets) : null;
+
+  if (experience) {
+    lines.push(`Trainingserfahrung: ${EXPERIENCE_LABEL[experience]}`);
+    if (experience === 'beginner') {
+      lines.push(
+        'LEVEL-CAP (Beginner, nicht verhandelbar): NIE RPE 10. In den ersten ' +
+          'Wochen ist RPE 7 das Ziel — Technik vor Intensität. Rate NIEMALS zu ' +
+          '"ans Limit", "ans Versagen" oder "da war mehr drin". Saubere Reps sind ' +
+          'das Ergebnis, nicht ein Zwischenschritt.',
+      );
+    }
+  }
+  if (maxRpe != null) {
     lines.push(
       `RPE-OBERGRENZE dieser Einheit: ${maxRpe} (aus dem Plan). Das ist das Maximum, ` +
         'kein Mindestwert — rate NIE, darüber hinauszugehen.' +
@@ -367,6 +461,34 @@ function buildUserPrompt(
       }
     }
   });
+
+  // --- Historie: Grundlage für "2 Einheiten in Folge". Ohne sie darf der Coach
+  // keine Progressionsbehauptung aufstellen. ---
+  lines.push('');
+  lines.push('VORHERIGE EINHEITEN DERSELBEN ÜBUNGEN (neueste zuerst)');
+  const historyBlocks: string[] = [];
+  for (const we of exercises) {
+    const name = splitName(we.notes);
+    const rows = historyForExercise(name, history);
+    if (rows.length > 0) historyBlocks.push(`${name}:`, ...rows);
+  }
+  if (historyBlocks.length === 0) {
+    lines.push('  (keine früheren Einheiten dieser Übungen vorhanden)');
+    lines.push(
+      'KEINE HISTORIE: Du darfst KEINE Progression mit "2 Einheiten in Folge" o. Ä. ' +
+        'begründen und NICHT behaupten, etwas sei "zweite Woche in Folge". Diese ' +
+        'Einheit ist die Baseline — Last bleibt, Progression wird erst mit der ' +
+        'nächsten vergleichbaren Einheit entschieden.',
+    );
+  } else {
+    lines.push(...historyBlocks);
+    lines.push(
+      'Progression ausschließlich auf Basis dieser echten Historie bewerten. ' +
+        'Eine Übung, die hier fehlt, hat keine verwertbare Vorgeschichte (z. B. ' +
+        'übersprungen) — sie zählt weder als Fortschritt noch als Rückschritt; ' +
+        'dann keine Progressionsbehauptung.',
+    );
+  }
 
   lines.push('');
   lines.push(
@@ -436,7 +558,14 @@ function asString(v: unknown, ctx: string): string {
   return v;
 }
 
-const VERDICTS: Verdict[] = ['in_range', 'above_range', 'below_range', 'rpe_low', 'stagnation'];
+const VERDICTS: Verdict[] = [
+  'in_range',
+  'above_range',
+  'below_range',
+  'rpe_low',
+  'stagnation',
+  'stopped',
+];
 const ADJUSTMENTS: Adjustment[] = ['maintain', 'increase', 'decrease'];
 
 function extractJson(raw: string): { json: string; precedingText: string } {
@@ -591,6 +720,25 @@ function round25(x: number): number {
  * Ausnahme Kalibrierung: dort ist `newLoad` das absolut ermittelte
  * Startgewicht und KEIN Schritt relativ zu currentLoad — nicht clampen.
  */
+/**
+ * 'stopped' (Abbruch/Schmerz) ist keine Wertung: adjustment hart auf
+ * 'maintain', kein newLoad, und ein etwaiger LOAD_ADJUSTMENT für diese Übung
+ * fliegt raus. Verhindert, dass ein Schmerzfall als Lastentscheidung durchgeht.
+ */
+function enforceStopped(ev: CoachEvaluation): void {
+  const stopped = new Set<string>();
+  for (const item of ev.evaluation) {
+    if (item.verdict !== 'stopped') continue;
+    stopped.add(item.exerciseName);
+    item.adjustment = 'maintain';
+    delete item.newLoad;
+  }
+  if (stopped.size === 0) return;
+  ev.markers = ev.markers.filter(
+    (m) => !(m.type === 'LOAD_ADJUSTMENT' && m.exerciseName && stopped.has(m.exerciseName)),
+  );
+}
+
 function clampLoadSteps(ev: CoachEvaluation, isCalibration: boolean): void {
   if (isCalibration) return;
 
@@ -650,7 +798,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   // 1) Body lesen
-  let body: { workout?: Workout; plan?: PlanResponse };
+  let body: {
+    workout?: Workout;
+    plan?: PlanResponse;
+    /** Frühere abgeschlossene Einheiten (für die "2 in Folge"-Regel). */
+    history?: Workout[];
+    /** Trainingserfahrung für den Level-Cap. */
+    experience?: string;
+  };
   try {
     body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) ?? {};
   } catch {
@@ -660,6 +815,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   const workout = body.workout;
   const plan = body.plan;
+  const history = Array.isArray(body.history)
+    ? body.history.filter((w) => w && Array.isArray(w.exercises))
+    : [];
+  const experience: ExperienceLevel | null =
+    body.experience === 'beginner' ||
+    body.experience === 'intermediate' ||
+    body.experience === 'advanced'
+      ? body.experience
+      : null;
   if (!workout || !Array.isArray(workout.exercises) || !plan?.framework?.weeks) {
     sendJson(res, 400, {
       error: 'bad_request',
@@ -697,6 +861,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       ctx?.weekIndex ?? null,
       isCalibration,
       plannedExercises,
+      history,
+      experience,
     );
 
     const client = new Anthropic();
@@ -752,7 +918,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     throw err;
   }
 
-  // Hard-Clamp auf eine Laststufe (außer Kalibrierung).
+  // Abbruch/Schmerz entwerten, dann Hard-Clamp auf eine Laststufe
+  // (Kalibrierung ausgenommen — dort ist newLoad das absolute Startgewicht).
+  enforceStopped(evaluation);
   clampLoadSteps(evaluation, isCalibration);
 
   sendJson(res, 200, evaluation);
