@@ -22,7 +22,7 @@ export function LegalAGB() {
       <p>
         (2) Anbieter und Vertragspartner ist:
         <br />
-        Philipp Nierstheimer, Clauswitzstraße 1, 26125 Oldenburg, Deutschland.
+        Philipp Nierstheimer, Clausewitzstraße 1, 26125 Oldenburg, Deutschland.
         <br />
         E-Mail: p.nierstheimer@gmx.de, Telefon: 0441 3844189.
       </p>

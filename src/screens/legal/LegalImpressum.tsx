@@ -9,7 +9,7 @@ export function LegalImpressum() {
       <p>
         Philipp Nierstheimer
         <br />
-        Clauswitzstraße 1
+        Clausewitzstraße 1
         <br />
         26125 Oldenburg
       </p>
@@ -39,7 +39,7 @@ export function LegalImpressum() {
       </p>
 
       <h3>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h3>
-      <p>Philipp Nierstheimer, Clauswitzstraße 1, 26125 Oldenburg</p>
+      <p>Philipp Nierstheimer, Clausewitzstraße 1, 26125 Oldenburg</p>
 
       <h3>Streitbeilegung</h3>
       <p>

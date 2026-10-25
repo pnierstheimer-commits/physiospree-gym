@@ -19,7 +19,7 @@ export function LegalDatenschutz() {
         der Datenschutz-Grundverordnung (DSGVO) ist:
       </p>
       <p>
-        Philipp Nierstheimer, Clauswitzstraße 1, 26125 Oldenburg, Deutschland.
+        Philipp Nierstheimer, Clausewitzstraße 1, 26125 Oldenburg, Deutschland.
         <br />
         E-Mail: p.nierstheimer@gmx.de, Telefon: 0441 3844189.
       </p>
