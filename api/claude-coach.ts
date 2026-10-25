@@ -52,6 +52,28 @@ interface CoachMarker {
   exerciseName?: string;
   delta?: number;
   reason: string;
+  // --- Payload-Felder je Marker-Typ (§10). Werden unverändert durchgereicht,
+  // damit z. B. EXERCISE_SWAP serverseitig nicht ins Leere läuft. ---
+  /** EXERCISE_SWAP / EXERCISE_UPGRADE: Ersatz-/Zielübung. */
+  newExerciseId?: string;
+  newName?: string;
+  newCue?: string;
+  newLevel?: number;
+  /** EXERCISE_SWAP: 'this_week' | 'permanent'. */
+  scope?: string;
+  /** SESSION_ADJUSTMENT: z. B. '-1_set_per_exercise'. */
+  volumeChange?: string;
+  sessionName?: string;
+  /** DELOAD: Volumenanteil, z. B. 0.6. */
+  volumeReduction?: number;
+  /** ILLNESS_RECOVERY. */
+  weeksOff?: number;
+  returnLoad?: number;
+  rampWeeks?: number;
+  /** VACATION_MODE. */
+  startDate?: string;
+  endDate?: string;
+  mode?: string;
 }
 
 interface CoachEvaluation {
@@ -136,10 +158,50 @@ function extractSection(md: string, headerPrefix: string): string {
  * Workout-Auswertung (§9) aus SKILL.md, der segmentspezifische
  * Auswertungsabschnitt, der Sprachleitfaden (TRAIN) und das Zykluslängen-Modul.
  */
+/**
+ * Verbindliche Zusatzregeln für die Marker-Erzeugung und die Laststeuerung.
+ * Schärft, was in SKILL §9/§10 sonst nur implizit steht — ohne die Fachregeln
+ * selbst umzuschreiben.
+ */
+const COACH_RULES = `# Verbindliche Regeln für diese Auswertung
+
+## Marker-Wahl (nicht verhandelbar)
+- Lastanpassung einer Übung -> \`LOAD_ADJUSTMENT\` (exerciseName + delta).
+- Tagesform/Readiness GELB (schlechter Schlaf, wenig Energie, Stress) ->
+  \`SESSION_ADJUSTMENT\` mit volumeChange (z. B. "-1_set_per_exercise").
+  NIEMALS die Last senken, nur weil die Tagesform gelb ist — Gelb reduziert
+  VOLUMEN, nicht Gewicht. Eine Lastsenkung braucht einen eigenen Grund aus den
+  Satzdaten (Reps unter Range bei Ziel-RPE).
+- Schmerz, der den Bewegungsablauf verändert, oder Gerät besetzt ->
+  \`EXERCISE_SWAP\`. Pflichtfelder: exerciseName (alt), newName (Ersatzübung aus
+  derselben Familie) und newExerciseId. Ohne newName/newExerciseId ist der
+  Marker wertlos — dann lieber gar keinen Marker setzen.
+- Stabile Performance über mehrere Wochen / Übung dauerhaft zu leicht ->
+  \`EXERCISE_UPGRADE\` mit exerciseName + newName (+ newExerciseId, newLevel).
+- Krankheit -> \`ILLNESS_RECOVERY\`, Urlaub -> \`VACATION_MODE\`,
+  Blockende/reaktive Entlastung -> \`DELOAD\`.
+
+## Laststeuerung
+- Maximal EINE Stufe pro Auswertung: ±2,5 kg. Niemals +5, +7,5 oder −5 in
+  einem Schritt. Wenn die Last grob danebenliegt, korrigiere eine Stufe und
+  sag an, dass in der nächsten Einheit nachjustiert wird.
+- delta eines LOAD_ADJUSTMENT ist dieselbe eine Stufe (+2,5 / −2,5).
+
+## RPE-Obergrenze (Level-/Phasen-Schutz)
+- Das je Übung angegebene RPE-Ziel ist eine OBERGRENZE, kein Mindestwert.
+  Rate NIEMALS, darüber hinauszugehen.
+- Liegt das RPE-Ziel bei ≤ 7, ist das eine bewusste Beginner-/Technikphase:
+  KEIN "geh ans Limit", KEIN "ans Versagen", KEIN "das war nur Aufwärmen".
+  Richtig ist dann: Technik und saubere Reps loben, Last nur erhöhen, wenn die
+  Reps über dem oberen Range-Ende liegen — und auch dann nur eine Stufe.`;
+
 function buildSystemPrompt(segment: CoachSegment): string {
   const skill = loadPrompt('SKILL.md');
   const supervisor = extractSection(skill, '## Schritt 7');
   const evaluation = extractSection(skill, '## Schritt 9');
+  // §10 = Marker-Vokabular inkl. Payloads (SESSION_ADJUSTMENT, EXERCISE_SWAP
+  // mit newExerciseId, EXERCISE_UPGRADE, ILLNESS_RECOVERY, VACATION_MODE).
+  const markerVocab = extractSection(skill, '## Schritt 10');
   const segmentEval = extractSection(loadPrompt(SEGMENT_REFERENCE[segment]), '## Auswertungslogik');
 
   return [
@@ -148,7 +210,9 @@ function buildSystemPrompt(segment: CoachSegment): string {
       'Supervisor- und Auswertungsregeln strikt an.',
     supervisor,
     evaluation,
+    markerVocab,
     `# Segmentspezifische Auswertung (${SEGMENT_LABEL[segment]})\n\n${segmentEval}`,
+    COACH_RULES,
     loadPrompt('sound.md'),
     loadPrompt('prompt-modul-zykluslaenge.md'),
   ]
@@ -172,7 +236,13 @@ const OUTPUT_SCHEMA = `{
     }
   ],
   "markers": [
-    { "type": "LOAD_ADJUSTMENT", "exerciseName": "Brustpresse", "delta": 2.5, "reason": "2x in Folge alle Sätze >= 15 bei RPE 9" }
+    { "type": "LOAD_ADJUSTMENT", "exerciseName": "Brustpresse", "delta": 2.5, "reason": "2x in Folge alle Sätze >= oberes Range-Ende bei Ziel-RPE" },
+    { "type": "SESSION_ADJUSTMENT", "volumeChange": "-1_set_per_exercise", "sessionName": "Push A", "reason": "Tagesform gelb — Volumen runter, Last bleibt" },
+    { "type": "EXERCISE_SWAP", "exerciseName": "Bankdrücken", "newName": "Brustpresse (Maschine)", "newExerciseId": "brustpresse-maschine", "newCue": "Schulterblätter zusammen, kontrolliert drücken", "scope": "this_week", "reason": "Schulterschmerz 6/10 verändert den Bewegungsablauf" },
+    { "type": "EXERCISE_UPGRADE", "exerciseName": "Beinpresse", "newName": "KH-Kniebeuge", "newExerciseId": "kh-kniebeuge", "newLevel": 2, "reason": "Stabile Performance, Übung dauerhaft zu leicht" },
+    { "type": "DELOAD", "volumeReduction": 0.6, "reason": "RPE 2 Wochen konstant >= 9 ohne Progression" },
+    { "type": "ILLNESS_RECOVERY", "weeksOff": 1, "returnLoad": 0.8, "rampWeeks": 2, "reason": "Krankheit gemeldet" },
+    { "type": "VACATION_MODE", "startDate": "2026-07-01", "endDate": "2026-07-14", "mode": "pause", "reason": "Urlaub" }
   ],
   "overallRPE": 8.5,
   "coachMessage": "Freitext im TRAIN-Sound: Gesamtbewertung der Einheit."
@@ -235,6 +305,24 @@ function buildUserPrompt(
       (weekIndex != null ? ` | Woche ${weekIndex + 1}` : ''),
   );
   lines.push(`Einheit: ${workout.name}${isCalibration ? ' (Kalibrierung)' : ''}`);
+
+  // Level-/Phasen-Schutz: Das RPE-Ziel des Plans kodiert bereits das Level
+  // (hypertrophy.md: "Beginner Wo 1–4: RPE 7 statt 9–10"). Es ist eine
+  // Obergrenze — der Coach darf nie zum Überschreiten raten.
+  const rpeTargets = plannedExercises
+    .map((pe) => pe.targetRPE)
+    .filter((r): r is number => typeof r === 'number' && r > 0);
+  if (rpeTargets.length > 0) {
+    const maxRpe = Math.max(...rpeTargets);
+    lines.push(
+      `RPE-OBERGRENZE dieser Einheit: ${maxRpe} (aus dem Plan). Das ist das Maximum, ` +
+        'kein Mindestwert — rate NIE, darüber hinauszugehen.' +
+        (maxRpe <= 7
+          ? ' Achtung: RPE-Ziel ≤ 7 = bewusste Beginner-/Technikphase. KEIN "ans Limit", ' +
+            'KEIN "ans Versagen", KEIN "das war nur Aufwärmen". Saubere Technik ist hier das Ziel.'
+          : ''),
+    );
+  }
   lines.push('');
   lines.push('SATZ-DATEN');
 
@@ -307,12 +395,22 @@ function buildUserPrompt(
   lines.push(
     'Antworte mit GENAU einem ```json-Block in exakt dieser Struktur (Feldnamen ' +
       'unverändert, keine weiteren Codeblöcke). `newLoad` nur wenn adjustment != ' +
-      '"maintain". markers nur, wenn eine konkrete Anpassung ansteht (sonst []).',
+      '"maintain". `overallRPE` IMMER als Zahl angeben — wenn keine Arbeitssätze ' +
+      'geloggt wurden (z. B. Abbruch wegen Schmerz), gib 0 an.',
+  );
+  lines.push(
+    'Der markers-Block unten ist ein TYP-KATALOG: Setze NUR die Marker, die hier ' +
+      'wirklich anstehen (meist 0 oder 1), mit allen Pflichtfeldern des jeweiligen ' +
+      'Typs. Steht nichts an: "markers": [].',
   );
   lines.push('```json');
   lines.push(OUTPUT_SCHEMA);
   lines.push('```');
   lines.push('Pro Übung genau ein evaluation-Eintrag. Konsequenz im rationale (TRAIN-Sound).');
+  lines.push(
+    'Lastanpassung: maximal EINE Stufe (±2,5 kg) pro Auswertung — in newLoad UND im ' +
+      'LOAD_ADJUSTMENT-delta.',
+  );
 
   return lines.join('\n');
 }
@@ -331,12 +429,6 @@ function asRecord(v: unknown, ctx: string): Record<string, unknown> {
 }
 function asArray(v: unknown, ctx: string): unknown[] {
   if (!Array.isArray(v)) throw new CoachValidationError(`${ctx} muss ein Array sein.`);
-  return v;
-}
-function asNumber(v: unknown, ctx: string): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) {
-    throw new CoachValidationError(`${ctx} muss eine Zahl sein.`);
-  }
   return v;
 }
 function asString(v: unknown, ctx: string): string {
@@ -361,7 +453,36 @@ function extractJson(raw: string): { json: string; precedingText: string } {
   throw new CoachValidationError('Keine JSON-Struktur in der Modellantwort gefunden.');
 }
 
-function parseCoachEvaluation(raw: string): CoachEvaluation {
+/** Tolerant: Zahl bleibt Zahl, String ("8.5"/"8,5") wird geparst, sonst null. */
+function coerceNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(',', '.').trim());
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/** Optionaler String aus dem Marker-Payload. */
+function strOpt(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
+/**
+ * Durchschnitts-RPE der geloggten Arbeitssätze — Fallback, wenn das Modell
+ * `overallRPE` nicht (oder nicht als Zahl) liefert. 0, wenn keine Sätze mit
+ * RPE vorliegen (z. B. Abbruch wegen Schmerz) — dann ist 0 die ehrliche Angabe.
+ */
+function fallbackOverallRpe(workout: Workout): number {
+  const rpes = workout.exercises
+    .flatMap((ex) => ex.sets)
+    .filter((s) => !s.isWarmup && typeof s.rpe === 'number')
+    .map((s) => s.rpe as number);
+  if (rpes.length === 0) return 0;
+  return Math.round((rpes.reduce((a, b) => a + b, 0) / rpes.length) * 10) / 10;
+}
+
+function parseCoachEvaluation(raw: string, fallbackRpe: number): CoachEvaluation {
   const { json, precedingText } = extractJson(raw);
 
   let parsed: unknown;
@@ -383,16 +504,17 @@ function parseCoachEvaluation(raw: string): CoachEvaluation {
     if (typeof adjustment !== 'string' || !ADJUSTMENTS.includes(adjustment as Adjustment)) {
       throw new CoachValidationError(`evaluation[${i}].adjustment ist ungültig.`);
     }
+    // Tolerant statt harter Abbruch: bei Abbruch-/Schmerzfällen liefert das
+    // Modell currentLoad/rationale gelegentlich nicht — kein Grund für 422.
     const item: CoachEvaluationItem = {
       exerciseName: asString(er.exerciseName, `evaluation[${i}].exerciseName`),
       verdict: verdict as Verdict,
-      currentLoad: asNumber(er.currentLoad, `evaluation[${i}].currentLoad`),
+      currentLoad: coerceNumber(er.currentLoad) ?? 0,
       adjustment: adjustment as Adjustment,
-      rationale: asString(er.rationale, `evaluation[${i}].rationale`),
+      rationale: typeof er.rationale === 'string' ? er.rationale : '',
     };
-    if (typeof er.newLoad === 'number' && Number.isFinite(er.newLoad)) {
-      item.newLoad = er.newLoad;
-    }
+    const newLoad = coerceNumber(er.newLoad);
+    if (newLoad !== null) item.newLoad = newLoad;
     return item;
   });
 
@@ -400,10 +522,36 @@ function parseCoachEvaluation(raw: string): CoachEvaluation {
     const mr = asRecord(m, `markers[${i}]`);
     const marker: CoachMarker = {
       type: asString(mr.type, `markers[${i}].type`),
-      reason: asString(mr.reason, `markers[${i}].reason`),
+      reason: typeof mr.reason === 'string' ? mr.reason : '',
     };
     if (typeof mr.exerciseName === 'string') marker.exerciseName = mr.exerciseName;
-    if (typeof mr.delta === 'number' && Number.isFinite(mr.delta)) marker.delta = mr.delta;
+    const delta = coerceNumber(mr.delta);
+    if (delta !== null) marker.delta = delta;
+    // Typ-spezifische Payload-Felder (§10) unverändert durchreichen — sonst
+    // läuft z. B. EXERCISE_SWAP ohne newName/newExerciseId ins Leere.
+    marker.newExerciseId = strOpt(mr.newExerciseId);
+    marker.newName = strOpt(mr.newName);
+    marker.newCue = strOpt(mr.newCue);
+    marker.scope = strOpt(mr.scope);
+    marker.volumeChange = strOpt(mr.volumeChange);
+    marker.sessionName = strOpt(mr.sessionName);
+    marker.startDate = strOpt(mr.startDate);
+    marker.endDate = strOpt(mr.endDate);
+    marker.mode = strOpt(mr.mode);
+    const newLevel = coerceNumber(mr.newLevel);
+    if (newLevel !== null) marker.newLevel = newLevel;
+    const volumeReduction = coerceNumber(mr.volumeReduction);
+    if (volumeReduction !== null) marker.volumeReduction = volumeReduction;
+    const weeksOff = coerceNumber(mr.weeksOff);
+    if (weeksOff !== null) marker.weeksOff = weeksOff;
+    const returnLoad = coerceNumber(mr.returnLoad);
+    if (returnLoad !== null) marker.returnLoad = returnLoad;
+    const rampWeeks = coerceNumber(mr.rampWeeks);
+    if (rampWeeks !== null) marker.rampWeeks = rampWeeks;
+    // undefined-Felder wieder entfernen, damit die Antwort schlank bleibt.
+    for (const k of Object.keys(marker) as (keyof CoachMarker)[]) {
+      if (marker[k] === undefined) delete marker[k];
+    }
     return marker;
   });
 
@@ -412,10 +560,14 @@ function parseCoachEvaluation(raw: string): CoachEvaluation {
       ? root.coachMessage.trim()
       : precedingText;
 
+  // overallRPE tolerant: Zahl, Zahl-String, sonst Fallback aus den Satzdaten.
+  // Kein harter Abbruch mehr — Schmerz-/Stoppfälle liefern sonst 422.
+  const overallRPE = coerceNumber(root.overallRPE) ?? fallbackRpe;
+
   return {
     evaluation,
     markers,
-    overallRPE: asNumber(root.overallRPE, 'overallRPE'),
+    overallRPE,
     coachMessage,
   };
 }
@@ -423,6 +575,44 @@ function parseCoachEvaluation(raw: string): CoachEvaluation {
 // ---------------------------------------------------------------------------
 // Plan-Kontext
 // ---------------------------------------------------------------------------
+
+/** Eine Laststufe laut Skills. */
+const LOAD_STEP_KG = 2.5;
+
+/** Auf 2,5-kg-Raster runden (nie negativ). */
+function round25(x: number): number {
+  return Math.max(0, Math.round(x / LOAD_STEP_KG) * LOAD_STEP_KG);
+}
+
+/**
+ * Hard-Clamp: maximal EINE Laststufe (±2,5 kg) pro Auswertung — in `newLoad`
+ * und im zugehörigen LOAD_ADJUSTMENT-delta. Verhindert Sprünge wie +7,5/−5.
+ *
+ * Ausnahme Kalibrierung: dort ist `newLoad` das absolut ermittelte
+ * Startgewicht und KEIN Schritt relativ zu currentLoad — nicht clampen.
+ */
+function clampLoadSteps(ev: CoachEvaluation, isCalibration: boolean): void {
+  if (isCalibration) return;
+
+  const clampedByName = new Map<string, number>();
+  for (const item of ev.evaluation) {
+    if (item.adjustment === 'maintain' || item.newLoad == null) continue;
+    const base = item.currentLoad;
+    const raw = item.newLoad - base;
+    if (raw === 0) continue;
+    const dir = raw > 0 ? 1 : -1;
+    const capped = round25(base + dir * LOAD_STEP_KG);
+    if (capped !== item.newLoad) item.newLoad = capped;
+    clampedByName.set(item.exerciseName, dir * LOAD_STEP_KG);
+  }
+
+  for (const m of ev.markers) {
+    if (m.type !== 'LOAD_ADJUSTMENT' || typeof m.delta !== 'number' || m.delta === 0) continue;
+    const fromItem = m.exerciseName ? clampedByName.get(m.exerciseName) : undefined;
+    const dir = m.delta > 0 ? 1 : -1;
+    m.delta = fromItem ?? dir * LOAD_STEP_KG;
+  }
+}
 
 function findPlannedSession(
   plan: PlanResponse,
@@ -553,7 +743,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   // 4) Validieren + zurückgeben
   let evaluation: CoachEvaluation;
   try {
-    evaluation = parseCoachEvaluation(raw);
+    evaluation = parseCoachEvaluation(raw, fallbackOverallRpe(workout));
   } catch (err) {
     if (err instanceof CoachValidationError) {
       sendJson(res, 422, { error: 'unprocessable_evaluation', message: err.message });
@@ -561,6 +751,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     throw err;
   }
+
+  // Hard-Clamp auf eine Laststufe (außer Kalibrierung).
+  clampLoadSteps(evaluation, isCalibration);
 
   sendJson(res, 200, evaluation);
 }
