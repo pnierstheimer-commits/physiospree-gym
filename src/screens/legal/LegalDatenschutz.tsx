@@ -242,7 +242,7 @@ export function LegalDatenschutz() {
         Supabase Inc., 970 Toa Payoh North, Singapur 318992. Speicherung deiner
         Konto-, Profil-, Trainings- und Chat-Daten sowie Versand der
         Anmeldecodes. Die Datenbank wird in einem Rechenzentrum innerhalb der
-        Europäischen Union betrieben (Frankfurt am Main, Deutschland).
+        Europäischen Union betrieben (Paris, Frankreich).
       </p>
       <p>
         <strong>KI-Verarbeitung</strong>
