@@ -1,4 +1,4 @@
-/** LegalDatenschutz — statische Datenschutzerklärung (DSGVO). Platzhalter [..] = TODO. */
+/** LegalDatenschutz — statische Datenschutzerklärung (DSGVO). */
 
 import '../screens.css';
 

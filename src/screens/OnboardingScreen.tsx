@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useApp } from '../lib/state';
 import type { Equipment, ExperienceLevel, Goal, UserProfile } from '../shared/types';
+import { AGE_LIMITS } from '../shared/constants';
 import { DisclaimerGate } from '../components/DisclaimerGate';
 import './screens.css';
 
@@ -188,9 +189,12 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
   const goBack = () => setStep((s) => Math.max(1, s - 1));
 
   const ageNum = age.trim() === '' ? null : Number(age);
-  const ageTooYoung = ageNum != null && ageNum < 15;
+  const ageTooYoung = ageNum != null && ageNum < AGE_LIMITS.min;
   const step1Valid =
-    name.trim().length >= 2 && ageNum != null && ageNum >= 15 && ageNum <= 99;
+    name.trim().length >= 2 &&
+    ageNum != null &&
+    ageNum >= AGE_LIMITS.min &&
+    ageNum <= AGE_LIMITS.max;
 
   const equipAllAnswered = EQUIP_QUESTIONS.every(({ key }) => equip[key] !== null);
 
@@ -283,15 +287,15 @@ export function OnboardingScreen({ onSignOut }: { onSignOut?: () => void } = {})
                   className="ps-onb-input"
                   type="number"
                   inputMode="numeric"
-                  min={15}
-                  max={99}
+                  min={AGE_LIMITS.min}
+                  max={AGE_LIMITS.max}
                   placeholder="z. B. 28"
                   value={age}
                   onChange={(e) => setAge(e.target.value.replace(/\D/g, '').slice(0, 3))}
                 />
                 {ageTooYoung && (
                   <span className="ps-onb-error">
-                    Physiospree Gym ist ab 15 Jahren verfügbar.
+                    Physiospree Gym ist ab {AGE_LIMITS.min} Jahren verfügbar.
                   </span>
                 )}
               </label>

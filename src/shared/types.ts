@@ -65,7 +65,7 @@ export interface UserProfile extends Syncable {
   /** Name/Vorname des Nutzers (Onboarding "Kurz zu dir"). */
   displayName: string;
   sex: Sex;
-  /** Alter in Jahren (Onboarding "Kurz zu dir", 15–99). */
+  /** Alter in Jahren (Onboarding "Kurz zu dir", Grenzen siehe AGE_LIMITS). */
   age?: number;
   /** Persönliches „Warum trainierst du?" (Onboarding, optional, ≤200 Zeichen). */
   goalWhy?: string;

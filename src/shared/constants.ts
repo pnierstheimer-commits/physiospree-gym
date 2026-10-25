@@ -264,6 +264,22 @@ export const BLOCK_STRUCTURE: {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Nutzungsvoraussetzung: Alter (Onboarding-Validierung + Hinweistexte)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mindest- und Höchstalter für die Nutzung (Single Source, Regel 2). Das
+ * Mindestalter ist rechtlich gebunden — AGB § 3 Abs. 3 nennt denselben Wert;
+ * Änderungen hier erfordern eine Anpassung der Rechtstexte.
+ */
+export const AGE_LIMITS = {
+  /** Mindestalter in Jahren. */
+  min: 16,
+  /** Höchstalter in Jahren (Plausibilitätsgrenze der Eingabe). */
+  max: 99,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Persistenz-Schemaversion (bei Breaking Changes erhöhen)
 // ---------------------------------------------------------------------------
 
