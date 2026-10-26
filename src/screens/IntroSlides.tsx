@@ -1,10 +1,14 @@
 /**
- * IntroSlides — 3 Onboarding-Folien vor dem Login (nur beim allerersten Start).
+ * IntroSlides — Onboarding-Folien vor dem Login (nur beim allerersten Start).
  *
  * Erscheint, wenn keine Session existiert UND localStorage "introSeen" !== "true".
- * "Überspringen" (Slide 1/2) und "Los geht's" (Slide 3) setzen beide das Flag
- * und rufen onDone() — danach routet App.tsx zum LoginScreen und die Slides
- * kommen nie wieder (bis localStorage gelöscht wird).
+ * "Überspringen" (alle Folien außer der letzten) und "Los geht's" (letzte Folie)
+ * setzen beide das Flag und rufen onDone() — danach routet App.tsx zum
+ * LoginScreen und die Slides kommen nie wieder (bis localStorage gelöscht wird).
+ *
+ * Drei Folien im Browser, zwei in der installierten PWA: die Installations-
+ * Anleitung ist plattformabhängig (siehe lib/pwa.ts) und entfällt, wenn die App
+ * bereits installiert läuft.
  *
  * Navigation: Swipe links/rechts ODER Tap auf rechte/linke Bildschirmhälfte.
  * UI-only (Regel 3): keine Daten, keine Logik außer dem lokalen Flag. Icons als
@@ -12,6 +16,7 @@
  */
 
 import { useRef, useState, type ReactNode } from 'react';
+import { detectPlatform, isStandalone, type Platform } from '../lib/pwa';
 import './screens.css';
 
 const INTRO_FLAG = 'introSeen';
@@ -90,7 +95,6 @@ interface ListItem {
 }
 
 interface Slide {
-  num: string;
   icon: IconName;
   headline: string;
   body?: ReactNode;
@@ -98,9 +102,14 @@ interface Slide {
   hint: string;
 }
 
-const SLIDES: Slide[] = [
-  {
-    num: '01',
+/**
+ * Installations-Slide je Plattform. Der Weg unterscheidet sich real: iOS kennt
+ * nur „Teilen → Zum Home-Bildschirm", Android das Browser-Menü, Desktop das
+ * Symbol in der Adressleiste. Eine Anleitung für alle wäre für zwei von drei
+ * Gruppen schlicht falsch.
+ */
+const INSTALL_SLIDE: Record<Platform, Slide> = {
+  ios: {
     icon: 'download',
     headline: 'App installieren',
     body: (
@@ -110,8 +119,31 @@ const SLIDES: Slide[] = [
     ),
     hint: 'Kein App Store nötig.',
   },
+  android: {
+    icon: 'download',
+    headline: 'App installieren',
+    body: (
+      <>
+        Öffne das <strong>Browser-Menü</strong> (⋮) und tippe auf{' '}
+        <strong>App installieren</strong> oder <strong>Zum Startbildschirm hinzufügen</strong>.
+      </>
+    ),
+    hint: 'Kein Play Store nötig.',
+  },
+  desktop: {
+    icon: 'download',
+    headline: 'App installieren',
+    body: (
+      <>
+        Klick auf das <strong>Installations-Symbol</strong> rechts in der Adressleiste.
+      </>
+    ),
+    hint: 'Läuft danach in einem eigenen Fenster.',
+  },
+};
+
+const SETUP_SLIDES: Slide[] = [
   {
-    num: '02',
     icon: 'user-check',
     headline: 'Kurzes Setup',
     list: [
@@ -122,13 +154,23 @@ const SLIDES: Slide[] = [
     hint: 'Dauert 2 Minuten. Danach kommt dein Plan.',
   },
   {
-    num: '03',
     icon: 'player-play',
     headline: 'Training starten',
     body: <>Dein Plan steht auf dem Startscreen. Sätze eintragen, der Coach passt an.</>,
     hint: 'Bei Fragen — schreib dem Coach.',
   },
 ];
+
+/**
+ * In der bereits installierten App entfällt die Installations-Slide ganz —
+ * eine Anleitung zum Installieren einer laufenden Installation hilft niemandem.
+ * Der Intro ist dann zweiteilig, die Nummerierung zieht automatisch mit.
+ */
+function buildSlides(installPlatform: Platform | null): Slide[] {
+  return installPlatform === null
+    ? SETUP_SLIDES
+    : [INSTALL_SLIDE[installPlatform], ...SETUP_SLIDES];
+}
 
 interface IntroSlidesProps {
   onDone: () => void;
@@ -140,8 +182,13 @@ export function IntroSlides({ onDone }: IntroSlidesProps) {
   const startY = useRef<number | null>(null);
   const suppressClick = useRef(false);
 
-  const last = SLIDES.length - 1;
-  const slide = SLIDES[index];
+  // Einmal beim Mount auswerten: null = läuft bereits als installierte PWA.
+  const [slides] = useState<Slide[]>(() =>
+    buildSlides(isStandalone() ? null : detectPlatform()),
+  );
+
+  const last = slides.length - 1;
+  const slide = slides[index];
 
   const next = () => setIndex((i) => Math.min(i + 1, last));
   const prev = () => setIndex((i) => Math.max(i - 1, 0));
@@ -200,7 +247,7 @@ export function IntroSlides({ onDone }: IntroSlidesProps) {
       />
 
       <div className="ps-intro-inner">
-        <div className="ps-intro-num">{slide.num}</div>
+        <div className="ps-intro-num">{String(index + 1).padStart(2, '0')}</div>
 
         <div className="ps-intro-center">
           <div className="ps-intro-icon">
@@ -228,8 +275,11 @@ export function IntroSlides({ onDone }: IntroSlidesProps) {
 
         <div className="ps-intro-foot">
           <div className="ps-intro-dots" role="presentation">
-            {SLIDES.map((s, i) => (
-              <span key={s.num} className={`ps-intro-dot${i === index ? ' is-active' : ''}`} />
+            {slides.map((s, i) => (
+              <span
+                key={s.headline}
+                className={`ps-intro-dot${i === index ? ' is-active' : ''}`}
+              />
             ))}
           </div>
           {index === last ? (
