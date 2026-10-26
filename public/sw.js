@@ -20,7 +20,10 @@
 //
 // Beim Ändern dieser Datei CACHE_VERSION hochzählen.
 
-const CACHE_VERSION = 'psg-v1';
+// v2: Manifest korrigiert (maskable Icon, theme_color). Ohne Bump bekämen
+// Clients mit v1-Cache per SWR erst beim übernächsten Start das neue Manifest —
+// und ein einmal mit altem Icon installiertes PWA-Symbol bleibt kleben.
+const CACHE_VERSION = 'psg-v2';
 const SHELL_URL = '/index.html';
 
 self.addEventListener('install', () => {
